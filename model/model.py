@@ -61,67 +61,70 @@ class STCNModel:
                 data[k] = v.cuda(non_blocking=True)
 
         out = {}
-        Fs = data['rgb']
-        Ms = data['gt']
+        Fs = data['instance_seg'] #used for Key and Value
+        Qs = data['gaze_heatmap'] #used for Query
+        Ms = data['label'] #Label mask
 
         with torch.cuda.amp.autocast(enabled=self.para['amp']):
             # key features never change, compute once
             k16, kf16_thin, kf16, kf8, kf4 = self.STCN('encode_key', Fs)
 
-            if self.single_object:
-                ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])
+            v16, vf16_thin, vf16 = self.STCN('encode_value', Fs)
 
-                # Segment frame 1 with frame 0
-                prev_logits, prev_mask = self.STCN('segment', 
-                        k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
-                        k16[:,:,0:1], ref_v)
-                prev_v = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask)
+            # if self.single_object:
+            #     ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])
 
-                values = torch.cat([ref_v, prev_v], 2)
+            #     # Segment frame 1 with frame 0
+            #     prev_logits, prev_mask = self.STCN('segment', 
+            #             k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
+            #             k16[:,:,0:1], ref_v)
+            #     prev_v = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask)
 
-                del ref_v
+            #     values = torch.cat([ref_v, prev_v], 2)
 
-                # Segment frame 2 with frame 0 and 1
-                this_logits, this_mask = self.STCN('segment', 
-                        k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
-                        k16[:,:,0:2], values)
+            #     del ref_v
 
-                out['mask_1'] = prev_mask
-                out['mask_2'] = this_mask
-                out['logits_1'] = prev_logits
-                out['logits_2'] = this_logits
-            else:
-                sec_Ms = data['sec_gt']
-                selector = data['selector']
+            #     # Segment frame 2 with frame 0 and 1
+            #     this_logits, this_mask = self.STCN('segment', 
+            #             k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
+            #             k16[:,:,0:2], values)
 
-                ref_v1 = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0], sec_Ms[:,0])
-                ref_v2 = self.STCN('encode_value', Fs[:,0], kf16[:,0], sec_Ms[:,0], Ms[:,0])
-                ref_v = torch.stack([ref_v1, ref_v2], 1)
+            #     out['mask_1'] = prev_mask
+            #     out['mask_2'] = this_mask
+            #     out['logits_1'] = prev_logits
+            #     out['logits_2'] = this_logits
+            # else:
+            #     sec_Ms = data['sec_gt']
+            #     selector = data['selector']
 
-                # Segment frame 1 with frame 0
-                prev_logits, prev_mask = self.STCN('segment', 
-                        k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
-                        k16[:,:,0:1], ref_v, selector)
+            #     ref_v1 = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0], sec_Ms[:,0])
+            #     ref_v2 = self.STCN('encode_value', Fs[:,0], kf16[:,0], sec_Ms[:,0], Ms[:,0])
+            #     ref_v = torch.stack([ref_v1, ref_v2], 1)
+
+            #     # Segment frame 1 with frame 0
+            #     prev_logits, prev_mask = self.STCN('segment', 
+            #             k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
+            #             k16[:,:,0:1], ref_v, selector)
                 
-                prev_v1 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,0:1], prev_mask[:,1:2])
-                prev_v2 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,1:2], prev_mask[:,0:1])
-                prev_v = torch.stack([prev_v1, prev_v2], 1)
-                values = torch.cat([ref_v, prev_v], 3)
+            #     prev_v1 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,0:1], prev_mask[:,1:2])
+            #     prev_v2 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,1:2], prev_mask[:,0:1])
+            #     prev_v = torch.stack([prev_v1, prev_v2], 1)
+            #     values = torch.cat([ref_v, prev_v], 3)
 
-                del ref_v
+            #     del ref_v
 
-                # Segment frame 2 with frame 0 and 1
-                this_logits, this_mask = self.STCN('segment', 
-                        k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
-                        k16[:,:,0:2], values, selector)
+            #     # Segment frame 2 with frame 0 and 1
+            #     this_logits, this_mask = self.STCN('segment', 
+            #             k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
+            #             k16[:,:,0:2], values, selector)
 
-                out['mask_1'] = prev_mask[:,0:1]
-                out['mask_2'] = this_mask[:,0:1]
-                out['sec_mask_1'] = prev_mask[:,1:2]
-                out['sec_mask_2'] = this_mask[:,1:2]
+            #     out['mask_1'] = prev_mask[:,0:1]
+            #     out['mask_2'] = this_mask[:,0:1]
+            #     out['sec_mask_1'] = prev_mask[:,1:2]
+            #     out['sec_mask_2'] = this_mask[:,1:2]
 
-                out['logits_1'] = prev_logits
-                out['logits_2'] = this_logits
+            #     out['logits_1'] = prev_logits
+            #     out['logits_2'] = this_logits
 
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
