@@ -77,10 +77,7 @@ class STCN(nn.Module):
         self.single_object = single_object
 
         self.key_encoder = KeyEncoder()
-        if single_object:
-            self.value_encoder = ValueEncoderSO() 
-        else:
-            self.value_encoder = ValueEncoder() 
+        self.value_encoder = ValueEncoder() 
 
         # Projection from f16 feature space to key space
         self.key_proj = KeyProjection(1024, keydim=64)
@@ -118,13 +115,23 @@ class STCN(nn.Module):
 
         return k16, f16_thin, f16, f8, f4
 
-    def encode_value(self, frame, kf16, mask, other_mask=None): 
-        # Extract memory key/value for a frame
-        if self.single_object:
-            f16 = self.value_encoder(frame, kf16, mask)
-        else:
-            f16 = self.value_encoder(frame, kf16, mask, other_mask)
-        return f16.unsqueeze(2) # B*512*T*H*W
+    def encode_value(self, frame): 
+        b, t = frame.shape[:2]
+
+        f16 = self.value_encoder(frame)
+
+        v16 = self.key_proj(f16)
+        f16_thin = self.key_comp(f16)
+
+        # B*C*T*H*W
+        v16 = v16.view(b, t, *v16.shape[-3:]).transpose(1, 2).contiguous()
+
+        # B*T*C*H*W
+        f16_thin = f16_thin.view(b, t, *f16_thin.shape[-3:])
+        f16 = f16.view(b, t, *f16.shape[-3:])
+
+        return v16, f16_thin, f16
+
 
     def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None): 
         # q - query, m - memory
@@ -153,6 +160,8 @@ class STCN(nn.Module):
             return self.encode_key(*args, **kwargs)
         elif mode == 'encode_value':
             return self.encode_value(*args, **kwargs)
+        elif mode == 'encode_query':
+            return self.encode_query(*args, **kwargs)
         elif mode == 'segment':
             return self.segment(*args, **kwargs)
         else:

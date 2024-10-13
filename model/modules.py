@@ -51,78 +51,103 @@ class FeatureFusionBlock(nn.Module):
         return x
 
 
-# Single object version, used only in static image pretraining
-# This will be loaded and modified into the multiple objects version later (in stage 1/2/3)
-# See model.py (load_network) for the modification procedure
-class ValueEncoderSO(nn.Module):
-    def __init__(self):
-        super().__init__()
+# # Single object version, used only in static image pretraining
+# # This will be loaded and modified into the multiple objects version later (in stage 1/2/3)
+# # See model.py (load_network) for the modification procedure
+# class ValueEncoderSO(nn.Module):
+#     def __init__(self):
+#         super().__init__()
 
-        resnet = mod_resnet.resnet18(pretrained=True, extra_chan=1)
-        self.conv1 = resnet.conv1
-        self.bn1 = resnet.bn1
-        self.relu = resnet.relu  # 1/2, 64
-        self.maxpool = resnet.maxpool
+#         resnet = mod_resnet.resnet18(pretrained=True, extra_chan=1)
+#         self.conv1 = resnet.conv1
+#         self.bn1 = resnet.bn1
+#         self.relu = resnet.relu  # 1/2, 64
+#         self.maxpool = resnet.maxpool
 
-        self.layer1 = resnet.layer1 # 1/4, 64
-        self.layer2 = resnet.layer2 # 1/8, 128
-        self.layer3 = resnet.layer3 # 1/16, 256
+#         self.layer1 = resnet.layer1 # 1/4, 64
+#         self.layer2 = resnet.layer2 # 1/8, 128
+#         self.layer3 = resnet.layer3 # 1/16, 256
 
-        self.fuser = FeatureFusionBlock(1024 + 256, 512)
+#         self.fuser = FeatureFusionBlock(1024 + 256, 512)
 
-    def forward(self, image, key_f16, mask):
-        # key_f16 is the feature from the key encoder
+#     def forward(self, image, key_f16, mask):
+#         # key_f16 is the feature from the key encoder
 
-        f = torch.cat([image, mask], 1)
+#         f = torch.cat([image, mask], 1)
 
-        x = self.conv1(f)
-        x = self.bn1(x)
-        x = self.relu(x)   # 1/2, 64
-        x = self.maxpool(x)  # 1/4, 64
-        x = self.layer1(x)   # 1/4, 64
-        x = self.layer2(x) # 1/8, 128
-        x = self.layer3(x) # 1/16, 256
+#         x = self.conv1(f)
+#         x = self.bn1(x)
+#         x = self.relu(x)   # 1/2, 64
+#         x = self.maxpool(x)  # 1/4, 64
+#         x = self.layer1(x)   # 1/4, 64
+#         x = self.layer2(x) # 1/8, 128
+#         x = self.layer3(x) # 1/16, 256
 
-        x = self.fuser(x, key_f16)
+#         x = self.fuser(x, key_f16)
 
-        return x
+#         return x
 
 
-# Multiple objects version, used in other times
+# # Multiple objects version, used in other times
+# class ValueEncoder(nn.Module):
+#     def __init__(self):
+#         super().__init__()
+
+#         resnet = mod_resnet.resnet18(pretrained=True, extra_chan=2)
+#         self.conv1 = resnet.conv1
+#         self.bn1 = resnet.bn1
+#         self.relu = resnet.relu  # 1/2, 64
+#         self.maxpool = resnet.maxpool
+
+#         self.layer1 = resnet.layer1 # 1/4, 64
+#         self.layer2 = resnet.layer2 # 1/8, 128
+#         self.layer3 = resnet.layer3 # 1/16, 256
+
+#         self.fuser = FeatureFusionBlock(1024 + 256, 512)
+
+#     def forward(self, image, key_f16, mask, other_masks):
+#         # key_f16 is the feature from the key encoder
+
+#         f = torch.cat([image, mask, other_masks], 1)
+
+#         x = self.conv1(f)
+#         x = self.bn1(x)
+#         x = self.relu(x)   # 1/2, 64
+#         x = self.maxpool(x)  # 1/4, 64
+#         x = self.layer1(x)   # 1/4, 64
+#         x = self.layer2(x) # 1/8, 128
+#         x = self.layer3(x) # 1/16, 256
+
+#         x = self.fuser(x, key_f16)
+
+#         return x
+ 
+# Value Encoder takes in image segmentation
 class ValueEncoder(nn.Module):
     def __init__(self):
         super().__init__()
-
-        resnet = mod_resnet.resnet18(pretrained=True, extra_chan=2)
+        resnet = models.resnet50(pretrained=True)
         self.conv1 = resnet.conv1
         self.bn1 = resnet.bn1
         self.relu = resnet.relu  # 1/2, 64
         self.maxpool = resnet.maxpool
 
-        self.layer1 = resnet.layer1 # 1/4, 64
-        self.layer2 = resnet.layer2 # 1/8, 128
-        self.layer3 = resnet.layer3 # 1/16, 256
+        self.res2 = resnet.layer1 # 1/4, 256
+        self.layer2 = resnet.layer2 # 1/8, 512
+        self.layer3 = resnet.layer3 # 1/16, 1024
 
-        self.fuser = FeatureFusionBlock(1024 + 256, 512)
-
-    def forward(self, image, key_f16, mask, other_masks):
-        # key_f16 is the feature from the key encoder
-
-        f = torch.cat([image, mask, other_masks], 1)
-
-        x = self.conv1(f)
+    def forward(self, f):
+        x = self.conv1(f) 
         x = self.bn1(x)
         x = self.relu(x)   # 1/2, 64
         x = self.maxpool(x)  # 1/4, 64
-        x = self.layer1(x)   # 1/4, 64
-        x = self.layer2(x) # 1/8, 128
-        x = self.layer3(x) # 1/16, 256
+        f4 = self.res2(x)   # 1/4, 256
+        f8 = self.layer2(f4) # 1/8, 512
+        f16 = self.layer3(f8) # 1/16, 1024
 
-        x = self.fuser(x, key_f16)
-
-        return x
- 
-
+        return f16
+    
+# Key Encoder takes in image segmentation
 class KeyEncoder(nn.Module):
     def __init__(self):
         super().__init__()
