@@ -665,7 +665,26 @@ class SituationalAwarenessDataset(Dataset):
         padded_label_mask_image_tensor = torch.nn.functional.pad(final_label_mask_image, (0, 0, 4, 4), mode='constant', value=0)
         padded_final_ignore_mask = torch.nn.functional.pad(final_ignore_mask.permute(2, 0, 1), (0, 0, 4, 4), mode='constant', value=0)
         
-        return padded_tensor, padded_label_mask_image_tensor, padded_final_ignore_mask
+        if self.use_rgb:
+            padded_rgb_image = torch.nn.functional.pad(rgb_image, (0, 0, 4, 4), mode='constant', value=0)
+
+        padded_instance_seg_image = torch.nn.functional.pad(instance_seg_image, (0, 0, 4, 4), mode='constant', value=0)
+        padded_gaze_heatmap = torch.nn.functional.pad(gaze_heatmap, (0, 0, 4, 4), mode='constant', value=0)
+
+        data = {
+            'input': padded_tensor,
+            'label': padded_label_mask_image_tensor,
+            'ignore_mask': padded_final_ignore_mask,
+            'gaze_heatmap': padded_gaze_heatmap,
+            'instance_seg': padded_instance_seg_image
+        }
+
+        if self.use_rgb:
+            data['rgb'] = padded_rgb_image
+        
+        return data
+
+        #return padded_tensor, padded_label_mask_image_tensor, padded_final_ignore_mask
 
     def __len__(self):        
         return len(self.index_mapping)
