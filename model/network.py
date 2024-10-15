@@ -139,9 +139,23 @@ class STCN(nn.Module):
     def encode_query(self, gaze_heatmap):
         # gaze heatmap image encoding
 
-        q16 = self.query_encoder(gaze_heatmap)
+        # input: b*t*c*h*w
+        b, t = gaze_heatmap.shape[:2]
 
-        return q16
+        f16, f8, f4 = self.key_encoder(gaze_heatmap.flatten(start_dim=0, end_dim=1))
+        q16 = self.key_proj(f16)
+        f16_thin = self.key_comp(f16)
+
+        # B*C*T*H*W
+        q16 = q16.view(b, t, *q16.shape[-3:]).transpose(1, 2).contiguous()
+
+        # B*T*C*H*W
+        f16_thin = f16_thin.view(b, t, *f16_thin.shape[-3:])
+        f16 = f16.view(b, t, *f16.shape[-3:])
+        f8 = f8.view(b, t, *f8.shape[-3:])
+        f4 = f4.view(b, t, *f4.shape[-3:])
+
+        return q16, f16_thin, f16, f8, f4
 
 
     def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None): 

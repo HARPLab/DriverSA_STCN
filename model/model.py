@@ -71,6 +71,8 @@ class STCNModel:
 
             v16, vf16_thin, vf16, vf8, vf4 = self.STCN('encode_value', Fs)
 
+            q16, qf16_thin, qf16, qf8, qf4 = self.STCN('encode_query', Qs)
+
             #TODO: finish this once query encoder is implemented
             # would also need to modify the segementation part of the network
 
