@@ -126,8 +126,8 @@ class FeatureFusionBlock(nn.Module):
 class ValueEncoder(nn.Module):
     def __init__(self):
         super().__init__()
-        resnet = models.resnet50(pretrained=True)
-        self.conv1 = resnet.conv1
+        resnet = models.resnet18(pretrained=False)
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3)
         self.bn1 = resnet.bn1
         self.relu = resnet.relu  # 1/2, 64
         self.maxpool = resnet.maxpool
@@ -152,8 +152,8 @@ class ValueEncoder(nn.Module):
 class KeyEncoder(nn.Module):
     def __init__(self):
         super().__init__()
-        resnet = models.resnet50(pretrained=True)
-        self.conv1 = resnet.conv1
+        resnet = models.resnet18(pretrained=False)
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3)
         self.bn1 = resnet.bn1
         self.relu = resnet.relu  # 1/2, 64
         self.maxpool = resnet.maxpool
@@ -178,8 +178,8 @@ class KeyEncoder(nn.Module):
 class QueryEncoder(nn.Module):
     def __init__(self):
         super().__init__()
-        resnet = models.resnet50(pretrained=True)
-        self.conv1 = resnet.conv1
+        resnet = models.resnet18(pretrained=False)
+        self.conv1 = nn.Conv2d(1, 64, kernel_size=7, stride=2, padding=3)
         self.bn1 = resnet.bn1
         self.relu = resnet.relu  # 1/2, 64
         self.maxpool = resnet.maxpool
