@@ -145,9 +145,10 @@ class ValueEncoder(nn.Module):
         f8 = self.layer2(f4) # 1/8, 512
         f16 = self.layer3(f8) # 1/16, 1024
 
-        return f16
+        return f16, f8, f4
     
 # Key Encoder takes in image segmentation
+# TODO: this is using resnet -- would need to retrain with binary images?
 class KeyEncoder(nn.Module):
     def __init__(self):
         super().__init__()
@@ -172,6 +173,32 @@ class KeyEncoder(nn.Module):
 
         return f16, f8, f4
 
+# Query Encoder takes in gaze heatmap
+# For now, keeping this as a straight image encoder
+class QueryEncoder(nn.Module):
+    def __init__(self):
+        super().__init__()
+        resnet = models.resnet50(pretrained=True)
+        self.conv1 = resnet.conv1
+        self.bn1 = resnet.bn1
+        self.relu = resnet.relu  # 1/2, 64
+        self.maxpool = resnet.maxpool
+
+        self.res2 = resnet.layer1 # 1/4, 256
+        self.layer2 = resnet.layer2 # 1/8, 512
+        self.layer3 = resnet.layer3 # 1/16, 1024
+
+    def forward(self, f):
+        x = self.conv1(f) 
+        x = self.bn1(x)
+        x = self.relu(x)   # 1/2, 64
+        x = self.maxpool(x)  # 1/4, 64
+        f4 = self.res2(x)   # 1/4, 256
+        f8 = self.layer2(f4) # 1/8, 512
+        f16 = self.layer3(f8) # 1/16, 1024
+
+        return f16, f8, f4
+        
 
 class UpsampleBlock(nn.Module):
     def __init__(self, skip_c, up_c, out_c, scale_factor=2):

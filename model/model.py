@@ -69,7 +69,10 @@ class STCNModel:
             # key features never change, compute once
             k16, kf16_thin, kf16, kf8, kf4 = self.STCN('encode_key', Fs)
 
-            v16, vf16_thin, vf16 = self.STCN('encode_value', Fs)
+            v16, vf16_thin, vf16, vf8, vf4 = self.STCN('encode_value', Fs)
+
+            #TODO: finish this once query encoder is implemented
+            # would also need to modify the segementation part of the network
 
             # if self.single_object:
             #     ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])

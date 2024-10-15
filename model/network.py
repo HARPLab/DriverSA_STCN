@@ -78,6 +78,7 @@ class STCN(nn.Module):
 
         self.key_encoder = KeyEncoder()
         self.value_encoder = ValueEncoder() 
+        self.query_encoder = QueryEncoder()
 
         # Projection from f16 feature space to key space
         self.key_proj = KeyProjection(1024, keydim=64)
@@ -118,7 +119,7 @@ class STCN(nn.Module):
     def encode_value(self, frame): 
         b, t = frame.shape[:2]
 
-        f16 = self.value_encoder(frame)
+        f16, f8, f4 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
 
         v16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
@@ -129,8 +130,18 @@ class STCN(nn.Module):
         # B*T*C*H*W
         f16_thin = f16_thin.view(b, t, *f16_thin.shape[-3:])
         f16 = f16.view(b, t, *f16.shape[-3:])
+        f16 = f16.view(b, t, *f16.shape[-3:])
+        f8 = f8.view(b, t, *f8.shape[-3:])
+        f4 = f4.view(b, t, *f4.shape[-3:])
 
-        return v16, f16_thin, f16
+        return v16, f16_thin, f16, f8, f4
+
+    def encode_query(self, gaze_heatmap):
+        # gaze heatmap image encoding
+
+        q16 = self.query_encoder(gaze_heatmap)
+
+        return q16
 
 
     def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None): 
