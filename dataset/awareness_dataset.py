@@ -8,8 +8,6 @@ import configparser
 import numpy as np
 import pandas as pd
 import os
-import matplotlib.pyplot as plt
-from scipy.stats import multivariate_normal
 from io import BytesIO
 import torchvision.transforms.functional as TF
 
@@ -246,7 +244,7 @@ class SituationalAwarenessDataset(Dataset):
         self.episode = episode
         self.rgb_frame_delay = 3
         self.use_rgb = args.use_rgb
-        self.middle_andsides = args.middle_andsides
+        self.middle_andsides = False
         self.instseg_channels = args.instseg_channels
         self.images_dir = Path(os.path.join(self.raw_data_dir, self.episode, "images"))
         aw_df_file_name = os.path.join(self.raw_data_dir, self.episode, 'rec_parse-awdata.json')
