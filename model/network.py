@@ -41,13 +41,13 @@ class MemoryReader(nn.Module):
         super().__init__()
  
     def get_affinity(self, mk, qk):
-        B, CK, T, H, W = mk.shape
+        B, CK, H, W = mk.shape
         mk = mk.flatten(start_dim=2)
         qk = qk.flatten(start_dim=2)
 
         # See supplementary material
         a_sq = mk.pow(2).sum(1).unsqueeze(2)
-        ab = mk.transpose(1, 2) @ qk
+        ab = mk @ qk
 
         affinity = (2*ab-a_sq) / math.sqrt(CK)   # B, THW, HW
         
@@ -60,9 +60,9 @@ class MemoryReader(nn.Module):
         return affinity
 
     def readout(self, affinity, mv, qv):
-        B, CV, T, H, W = mv.shape
+        B, CV, H, W = mv.shape
 
-        mo = mv.view(B, CV, T*H*W) 
+        mo = mv.view(B, CV, H*W) 
         mem = torch.bmm(mo, affinity) # Weighted-sum B, CV, HW
         mem = mem.view(B, CV, H, W)
 
