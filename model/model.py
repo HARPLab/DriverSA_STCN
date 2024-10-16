@@ -79,7 +79,7 @@ class STCNModel:
             # segment args: query-key, query-value, query-f8, query-f4, memory-key, memory-value
             # k16, v16, kf8, kf4, q16, qf16 ???
 
-            logits, mask = self.STCN('segment', q16, v16, vf8, vf4, k16, v16)
+            logits, mask = self.STCN('segment', k16, v16, kf8, kf4, q16, qf16)
 
             # if self.single_object:
             #     ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])

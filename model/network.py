@@ -159,11 +159,23 @@ class STCN(nn.Module):
 
         return q16, f16_thin, f16, f8, f4
 
+    def self_attention(self, k16, q16, v16):
+        # self attention between key instance segmentation and query gaze heatmap
+        # k16, q16, v16 shape: [b, c, h, w]
+        similarity  = self.memory.get_affinity(k16, q16) # TODO: change affinitiy calculation
+        scaled = similarity / math.sqrt(k16.shape[1])
+        attention = F.softmax(scaled, dim=-1)
+        out = attention @ v16
+        return out
+
 
     def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None): 
+        # k16, v16, kf8, kf4, q16, qf16 ???
         # q - query, m - memory
         # qv16 is f16_thin above
-        affinity = self.memory.get_affinity(mk16, qk16)
+        #affinity = self.memory.get_affinity(mk16, qk16)
+
+        attention = self.self_attention(qk16, mk16, qv16)
         
         if self.single_object:
             logits = self.decoder(self.memory.readout(affinity, mv16, qv16), qf8, qf4)
