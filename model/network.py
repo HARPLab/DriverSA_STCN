@@ -98,26 +98,28 @@ class STCN(nn.Module):
         return logits
 
     def encode_key(self, frame): 
+        #Vos dataset frame shape: [b, 3, 3, 384, 384]
+        #awareness dataset frame shape: [b, 1, 608, 800]
         # input: b*t*c*h*w
-        b, t = frame.shape[:2]
+        b = frame.shape[:1]
 
         f16, f8, f4 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
         k16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
 
         # B*C*T*H*W
-        k16 = k16.view(b, t, *k16.shape[-3:]).transpose(1, 2).contiguous()
+        k16 = k16.view(b, *k16.shape[-3:]).contiguous()
 
         # B*T*C*H*W
-        f16_thin = f16_thin.view(b, t, *f16_thin.shape[-3:])
-        f16 = f16.view(b, t, *f16.shape[-3:])
-        f8 = f8.view(b, t, *f8.shape[-3:])
-        f4 = f4.view(b, t, *f4.shape[-3:])
+        f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        f16 = f16.view(b, *f16.shape[-3:])
+        f8 = f8.view(b, *f8.shape[-3:])
+        f4 = f4.view(b, *f4.shape[-3:])
 
         return k16, f16_thin, f16, f8, f4
 
     def encode_value(self, frame): 
-        b, t = frame.shape[:2]
+        b = frame.shape[:1]
 
         f16, f8, f4 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
 
@@ -125,14 +127,14 @@ class STCN(nn.Module):
         f16_thin = self.key_comp(f16)
 
         # B*C*T*H*W
-        v16 = v16.view(b, t, *v16.shape[-3:]).transpose(1, 2).contiguous()
+        v16 = v16.view(b, *v16.shape[-3:]).contiguous()
 
         # B*T*C*H*W
-        f16_thin = f16_thin.view(b, t, *f16_thin.shape[-3:])
-        f16 = f16.view(b, t, *f16.shape[-3:])
-        f16 = f16.view(b, t, *f16.shape[-3:])
-        f8 = f8.view(b, t, *f8.shape[-3:])
-        f4 = f4.view(b, t, *f4.shape[-3:])
+        f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        f16 = f16.view(b, *f16.shape[-3:])
+        f16 = f16.view(b, *f16.shape[-3:])
+        f8 = f8.view(b, *f8.shape[-3:])
+        f4 = f4.view(b, *f4.shape[-3:])
 
         return v16, f16_thin, f16, f8, f4
 
@@ -140,20 +142,20 @@ class STCN(nn.Module):
         # gaze heatmap image encoding
 
         # input: b*t*c*h*w
-        b, t = gaze_heatmap.shape[:2]
+        b = gaze_heatmap.shape[:1]
 
         f16, f8, f4 = self.key_encoder(gaze_heatmap.flatten(start_dim=0, end_dim=1))
         q16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
 
         # B*C*T*H*W
-        q16 = q16.view(b, t, *q16.shape[-3:]).transpose(1, 2).contiguous()
+        q16 = q16.view(b, *q16.shape[-3:]).contiguous()
 
         # B*T*C*H*W
-        f16_thin = f16_thin.view(b, t, *f16_thin.shape[-3:])
-        f16 = f16.view(b, t, *f16.shape[-3:])
-        f8 = f8.view(b, t, *f8.shape[-3:])
-        f4 = f4.view(b, t, *f4.shape[-3:])
+        f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        f16 = f16.view(b, *f16.shape[-3:])
+        f8 = f8.view(b, *f8.shape[-3:])
+        f4 = f4.view(b, *f4.shape[-3:])
 
         return q16, f16_thin, f16, f8, f4
 
