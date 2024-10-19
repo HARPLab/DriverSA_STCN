@@ -70,37 +70,19 @@ class MemoryReader(nn.Module):
 
         return mem_out
 
-class MultiHeadedAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads, ff_dim, dropout=0.1):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
 
-        # Multi-head attention layers
-        self.q_linear = nn.Linear(embed_dim, embed_dim)
-        self.k_linear = nn.Linear(embed_dim, embed_dim)
-        self.v_linear = nn.Linear(embed_dim, embed_dim)
-        self.out_linear = nn.Linear(embed_dim, embed_dim)
-
-        # Normalization layers
-        self.norm1 = nn.LayerNorm(embed_dim)
-        self.norm2 = nn.LayerNorm(embed_dim)
-
-        # Feed-forward network
-        self.ff_network = nn.Sequential(
-            nn.Linear(embed_dim, ff_dim),
-            nn.ReLU(),
-            nn.Linear(ff_dim, embed_dim)
-        )
-
-        # Dropout
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, k, q, v):
-        B, C, H, W = k.shape
-
-        # Linear transformation
+class SelfAttention(nn.Module):
+    def __init__(self, input_dim):
+        super(SelfAttention, self).__init__()
+        self.input_dim = input_dim
+        self.softmax == F.Softmax(dim=-1)
+   
+    def forward(self, k, q, v): # x.shape (batch_size, seq_length, input_dim)
+        similarity = k @ q
+        scaled = similarity / math.sqrt(self.input_dim)
+        attention = self.softmax(scaled)
+        out = attention @ v
+        return out
 
 
 
@@ -192,7 +174,7 @@ class STCN(nn.Module):
 
         return q16, f16_thin, f16, f8, f4
 
-    def self_attention(self, k16, q16, v16):
+    def self_attention_op(self, k16, q16, v16):
         # self attention between key instance segmentation and query gaze heatmap
         # k16, q16, v16 shape: [b, c, h, w]
         similarity  = k16 @ q16
@@ -204,12 +186,12 @@ class STCN(nn.Module):
 
     def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None): 
         # k16, v16, kf8, kf4, q16, qf16 ???
-        # q - query, m - memory
-        # qv16 is f16_thin above
         #affinity = self.memory.get_affinity(mk16, qk16)
 
         # TODO: make this a self attention block with feed forward and all
         attention = self.self_attention(qk16, mk16, qv16)
+        attention_module = SelfAttention(qk16.shape[1])
+        attention = attention_module(qk16, mk16, qv16)
 
         logits = self.decoder(attention, qf8, qf4)
         prob = torch.sigmoid(logits)
