@@ -70,6 +70,39 @@ class MemoryReader(nn.Module):
 
         return mem_out
 
+class MultiHeadedAttention(nn.Module):
+    def __init__(self, embed_dim, num_heads, ff_dim, dropout=0.1):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+
+        # Multi-head attention layers
+        self.q_linear = nn.Linear(embed_dim, embed_dim)
+        self.k_linear = nn.Linear(embed_dim, embed_dim)
+        self.v_linear = nn.Linear(embed_dim, embed_dim)
+        self.out_linear = nn.Linear(embed_dim, embed_dim)
+
+        # Normalization layers
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+
+        # Feed-forward network
+        self.ff_network = nn.Sequential(
+            nn.Linear(embed_dim, ff_dim),
+            nn.ReLU(),
+            nn.Linear(ff_dim, embed_dim)
+        )
+
+        # Dropout
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, k, q, v):
+        B, C, H, W = k.shape
+
+        # Linear transformation
+
+
 
 class STCN(nn.Module):
     def __init__(self, single_object):
@@ -100,17 +133,17 @@ class STCN(nn.Module):
     def encode_key(self, frame): 
         #Vos dataset frame shape: [b, 3, 3, 384, 384]
         #awareness dataset frame shape: [b, 1, 608, 800]
-        # input: b*t*c*h*w
+        # input: b*c*h*w
         b = frame.shape[:1]
 
         f16, f8, f4 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
         k16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
 
-        # B*C*T*H*W
+        # B*C*H*W
         k16 = k16.view(b, *k16.shape[-3:]).contiguous()
 
-        # B*T*C*H*W
+        # B*CHW
         f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
         f16 = f16.view(b, *f16.shape[-3:])
         f8 = f8.view(b, *f8.shape[-3:])
@@ -162,7 +195,7 @@ class STCN(nn.Module):
     def self_attention(self, k16, q16, v16):
         # self attention between key instance segmentation and query gaze heatmap
         # k16, q16, v16 shape: [b, c, h, w]
-        similarity  = self.memory.get_affinity(k16, q16) # TODO: change affinitiy calculation
+        similarity  = k16 @ q16
         scaled = similarity / math.sqrt(k16.shape[1])
         attention = F.softmax(scaled, dim=-1)
         out = attention @ v16
@@ -175,19 +208,23 @@ class STCN(nn.Module):
         # qv16 is f16_thin above
         #affinity = self.memory.get_affinity(mk16, qk16)
 
+        # TODO: make this a self attention block with feed forward and all
         attention = self.self_attention(qk16, mk16, qv16)
-        
-        if self.single_object:
-            logits = self.decoder(self.memory.readout(affinity, mv16, qv16), qf8, qf4)
-            prob = torch.sigmoid(logits)
-        else:
-            logits = torch.cat([
-                self.decoder(self.memory.readout(affinity, mv16[:,0], qv16), qf8, qf4),
-                self.decoder(self.memory.readout(affinity, mv16[:,1], qv16), qf8, qf4),
-            ], 1)
 
-            prob = torch.sigmoid(logits)
-            prob = prob * selector.unsqueeze(2).unsqueeze(2)
+        logits = self.decoder(attention, qf8, qf4)
+        prob = torch.sigmoid(logits)
+        
+        # if self.single_object:
+        #     logits = self.decoder(self.memory.readout(affinity, mv16, qv16), qf8, qf4)
+        #     prob = torch.sigmoid(logits)
+        # else:
+        #     logits = torch.cat([
+        #         self.decoder(self.memory.readout(affinity, mv16[:,0], qv16), qf8, qf4),
+        #         self.decoder(self.memory.readout(affinity, mv16[:,1], qv16), qf8, qf4),
+        #     ], 1)
+
+        #     prob = torch.sigmoid(logits)
+        #     prob = prob * selector.unsqueeze(2).unsqueeze(2)
 
         logits = self.aggregate(prob)
         prob = F.softmax(logits, dim=1)[:, 1:]
