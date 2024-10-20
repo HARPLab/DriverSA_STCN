@@ -145,7 +145,7 @@ class ValueEncoder(nn.Module):
         f8 = self.layer2(f4) # 1/8, 512
         f16 = self.layer3(f8) # 1/16, 1024
 
-        return f16, f8, f4
+        return f16 #, f8, f4
     
 # Key Encoder takes in image segmentation
 # TODO: this is using resnet -- would need to retrain with binary images?
@@ -171,7 +171,7 @@ class KeyEncoder(nn.Module):
         f8 = self.layer2(f4) # 1/8, 512
         f16 = self.layer3(f8) # 1/16, 1024
 
-        return f16, f8, f4
+        return f16 #, f8, f4
 
 # Query Encoder takes in gaze heatmap
 # For now, keeping this as a straight image encoder
@@ -197,7 +197,7 @@ class QueryEncoder(nn.Module):
         f8 = self.layer2(f4) # 1/8, 512
         f16 = self.layer3(f8) # 1/16, 1024
 
-        return f16, f8, f4
+        return f16 #, f8, f4
         
 
 class UpsampleBlock(nn.Module):

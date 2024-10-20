@@ -67,11 +67,11 @@ class STCNModel:
 
         with torch.cuda.amp.autocast(enabled=self.para['amp']):
             # key features never change, compute once
-            k16, kf16_thin, kf16, kf8, kf4 = self.STCN('encode_key', Fs)
+            k16, kf16= self.STCN('encode_key', Fs)
 
-            v16, vf16_thin, vf16, vf8, vf4 = self.STCN('encode_value', Fs)
+            v16, vf16 = self.STCN('encode_value', Fs)
 
-            q16, qf16_thin, qf16, qf8, qf4 = self.STCN('encode_query', Qs)
+            q16, qf16= self.STCN('encode_query', Qs)
 
             #TODO: finish this once query encoder is implemented
             # would also need to modify the segementation part of the network
@@ -79,7 +79,10 @@ class STCNModel:
             # segment args: query-key, query-value, query-f8, query-f4, memory-key, memory-value
             # k16, v16, kf8, kf4, q16, qf16 ???
 
-            logits, mask = self.STCN('segment', k16, v16, kf8, kf4, q16, qf16)
+            logits, mask = self.STCN('segment', k16, v16, q16, qf16)
+
+            out['logits'] = logits
+            out['mask'] = mask
 
             # if self.single_object:
             #     ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])

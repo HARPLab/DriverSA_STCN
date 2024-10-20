@@ -20,15 +20,15 @@ class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
         self.compress = ResBlock(1024, 512)
-        self.up_16_8 = UpsampleBlock(512, 512, 256) # 1/16 -> 1/8
-        self.up_8_4 = UpsampleBlock(256, 256, 256) # 1/8 -> 1/4
+        #self.up_16_8 = UpsampleBlock(512, 512, 256) # 1/16 -> 1/8
+        #self.up_8_4 = UpsampleBlock(256, 256, 256) # 1/8 -> 1/4
 
         self.pred = nn.Conv2d(256, 1, kernel_size=(3,3), padding=(1,1), stride=1)
 
-    def forward(self, f16, f8, f4):
+    def forward(self, f16):
         x = self.compress(f16)
-        x = self.up_16_8(f8, x)
-        x = self.up_8_4(f4, x)
+        #x = self.up_16_8(f8, x)
+        #x = self.up_8_4(f4, x)
 
         x = self.pred(F.relu(x))
         
@@ -118,7 +118,7 @@ class STCN(nn.Module):
         # input: b*c*h*w
         b = frame.shape[:1]
 
-        f16, f8, f4 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
+        f16 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
         k16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
 
@@ -126,17 +126,17 @@ class STCN(nn.Module):
         k16 = k16.view(b, *k16.shape[-3:]).contiguous()
 
         # B*CHW
-        f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
         f16 = f16.view(b, *f16.shape[-3:])
-        f8 = f8.view(b, *f8.shape[-3:])
-        f4 = f4.view(b, *f4.shape[-3:])
+        #f8 = f8.view(b, *f8.shape[-3:])
+        #f4 = f4.view(b, *f4.shape[-3:])
 
-        return k16, f16_thin, f16, f8, f4
+        return k16, f16
 
     def encode_value(self, frame): 
         b = frame.shape[:1]
 
-        f16, f8, f4 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
+        f16 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
 
         v16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
@@ -145,13 +145,13 @@ class STCN(nn.Module):
         v16 = v16.view(b, *v16.shape[-3:]).contiguous()
 
         # B*T*C*H*W
-        f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
         f16 = f16.view(b, *f16.shape[-3:])
         f16 = f16.view(b, *f16.shape[-3:])
-        f8 = f8.view(b, *f8.shape[-3:])
-        f4 = f4.view(b, *f4.shape[-3:])
+        # f8 = f8.view(b, *f8.shape[-3:])
+        # f4 = f4.view(b, *f4.shape[-3:])
 
-        return v16, f16_thin, f16, f8, f4
+        return v16, f16
 
     def encode_query(self, gaze_heatmap):
         # gaze heatmap image encoding
@@ -159,7 +159,7 @@ class STCN(nn.Module):
         # input: b*t*c*h*w
         b = gaze_heatmap.shape[:1]
 
-        f16, f8, f4 = self.key_encoder(gaze_heatmap.flatten(start_dim=0, end_dim=1))
+        f16 = self.key_encoder(gaze_heatmap.flatten(start_dim=0, end_dim=1))
         q16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
 
@@ -167,12 +167,12 @@ class STCN(nn.Module):
         q16 = q16.view(b, *q16.shape[-3:]).contiguous()
 
         # B*T*C*H*W
-        f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
         f16 = f16.view(b, *f16.shape[-3:])
-        f8 = f8.view(b, *f8.shape[-3:])
-        f4 = f4.view(b, *f4.shape[-3:])
+        # f8 = f8.view(b, *f8.shape[-3:])
+        # f4 = f4.view(b, *f4.shape[-3:])
 
-        return q16, f16_thin, f16, f8, f4
+        return q16, f16
 
     def self_attention_op(self, k16, q16, v16):
         # self attention between key instance segmentation and query gaze heatmap
@@ -188,12 +188,11 @@ class STCN(nn.Module):
         # k16, v16, kf8, kf4, q16, qf16 ???
         #affinity = self.memory.get_affinity(mk16, qk16)
 
-        # TODO: make this a self attention block with feed forward and all
         attention = self.self_attention(qk16, mk16, qv16)
         attention_module = SelfAttention(qk16.shape[1])
         attention = attention_module(qk16, mk16, qv16)
 
-        logits = self.decoder(attention, qf8, qf4)
+        logits = self.decoder(attention)
         prob = torch.sigmoid(logits)
         
         # if self.single_object:
