@@ -55,30 +55,31 @@ class LossComputer:
     def compute(self, data, it):
         losses = defaultdict(int)
 
-        b, s, _, _, _ = data['gt'].shape
-        selector = data.get('selector', None)
+        b, _, _, _ = data['label'].shape
+        #selector = data.get('selector', None)
 
-        for i in range(1, s):
-            # Have to do it in a for-loop like this since not every entry has the second object
-            # Well it's not a lot of iterations anyway
-            for j in range(b):
-                if selector is not None and selector[j][1] > 0.5:
-                    loss, p = self.bce(data['logits_%d'%i][j:j+1], data['cls_gt'][j:j+1,i], it)
-                else:
-                    loss, p = self.bce(data['logits_%d'%i][j:j+1,:2], data['cls_gt'][j:j+1,i], it)
+        # for i in range(1, s):
+        #     # Have to do it in a for-loop like this since not every entry has the second object
+        #     # Well it's not a lot of iterations anyway
+        for j in range(b):
+            loss, p =  self.bce(data['logits'][j:j+1], data['label'][j:j+1], it)
+            # if selector is not None and selector[j][1] > 0.5:
+            #     loss, p = self.bce(data['logits_%d'%i][j:j+1], data['cls_gt'][j:j+1,i], it)
+            # else:
+            #     loss, p = self.bce(data['logits_%d'%i][j:j+1,:2], data['cls_gt'][j:j+1,i], it)
 
-                losses['loss_%d'%i] += loss / b
-                losses['p'] += p / b / (s-1)
+            losses['loss'] += loss / b
+            losses['p'] += p / b
 
-            losses['total_loss'] += losses['loss_%d'%i]
+            losses['total_loss'] += losses['loss']
 
-            new_total_i, new_total_u = compute_tensor_iu(data['mask_%d'%i]>0.5, data['gt'][:,i]>0.5)
+            new_total_i, new_total_u = compute_tensor_iu(data['mask']>0.5, data['label']>0.5)
             losses['hide_iou/i'] += new_total_i
             losses['hide_iou/u'] += new_total_u
 
-            if selector is not None:
-                new_total_i, new_total_u = compute_tensor_iu(data['sec_mask_%d'%i]>0.5, data['sec_gt'][:,i]>0.5)
-                losses['hide_iou/sec_i'] += new_total_i
-                losses['hide_iou/sec_u'] += new_total_u
+            # if selector is not None:
+            #     new_total_i, new_total_u = compute_tensor_iu(data['sec_mask_%d'%i]>0.5, data['sec_gt'][:,i]>0.5)
+            #     losses['hide_iou/sec_i'] += new_total_i
+            #     losses['hide_iou/sec_u'] += new_total_u
 
         return losses
