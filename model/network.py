@@ -118,7 +118,7 @@ class STCN(nn.Module):
         # input: b*c*h*w
         b = frame.shape[:1]
 
-        f16 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
+        f16 = self.key_encoder(frame)
         k16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
 
@@ -136,7 +136,7 @@ class STCN(nn.Module):
     def encode_value(self, frame): 
         b = frame.shape[:1]
 
-        f16 = self.key_encoder(frame.flatten(start_dim=0, end_dim=1))
+        f16 = self.key_encoder(frame)
 
         v16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
@@ -159,7 +159,7 @@ class STCN(nn.Module):
         # input: b*t*c*h*w
         b = gaze_heatmap.shape[:1]
 
-        f16 = self.key_encoder(gaze_heatmap.flatten(start_dim=0, end_dim=1))
+        f16 = self.key_encoder(gaze_heatmap)
         q16 = self.key_proj(f16)
         f16_thin = self.key_comp(f16)
 

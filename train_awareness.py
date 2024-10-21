@@ -13,6 +13,8 @@ from util.hyper_para import HyperParameters
 from model.model import STCNModel
 from torch.utils.data import DataLoader
 
+from  torch.cuda.amp import autocast
+
 def main(args):
     """
     Initial setup
@@ -46,7 +48,7 @@ def main(args):
             data.append(dataset)
             #concat_val_sample_weights += dataset.get_sample_weights()
     small_dataset = torch.utils.data.ConcatDataset(data)
-    train_sampler = torch.utils.data.distributed.DistributedSampler(small_dataset, shuffle=True)
+    # train_sampler = torch.utils.data.distributed.DistributedSampler(small_dataset, shuffle=True)
     train_loader = DataLoader(small_dataset, batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
 
     """
@@ -72,12 +74,13 @@ def main(args):
         #     train_sampler, train_loader = renew_loader(cur_skip)
 
         # Crucial for randomness! 
-        train_sampler.set_epoch(e)
+        # train_sampler.set_epoch(e)
 
         # Train loop
         model.train()
         for data in train_loader:
-            model.do_pass(data, total_iter)
+            with autocast():
+                model.do_pass(data, total_iter)
             total_iter += 1
 
             if total_iter >= para['iterations']:
