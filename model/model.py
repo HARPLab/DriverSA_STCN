@@ -26,7 +26,7 @@ class STCNModel:
         #     STCN(self.single_object).cuda(), 
         #     device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
 
-        self.STCN = STCN(self.single_object)
+        self.STCN = STCN(self.single_object).cuda()
 
         # Setup logger when local_rank=0
         self.logger = logger
@@ -143,6 +143,7 @@ class STCNModel:
 
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
+                print(losses)
 
                 # Logging
                 if self._do_log:

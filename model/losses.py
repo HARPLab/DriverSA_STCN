@@ -32,6 +32,7 @@ class BootstrappedCE(nn.Module):
         self.top_p = top_p
 
     def forward(self, input, target, it):
+        target = target.squeeze(1)
         if it < self.start_warm:
             return F.cross_entropy(input, target), 1.0
 
@@ -62,6 +63,9 @@ class LossComputer:
         #     # Have to do it in a for-loop like this since not every entry has the second object
         #     # Well it's not a lot of iterations anyway
         for j in range(b):
+            # print(data['logits'].shape)
+            # print(data['label'].shape)
+            # print(data['mask'].shape)
             loss, p =  self.bce(data['logits'][j:j+1], data['label'][j:j+1], it)
             # if selector is not None and selector[j][1] > 0.5:
             #     loss, p = self.bce(data['logits_%d'%i][j:j+1], data['cls_gt'][j:j+1,i], it)

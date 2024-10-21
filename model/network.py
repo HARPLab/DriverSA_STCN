@@ -19,7 +19,7 @@ from model.modules import *
 class Decoder(nn.Module):
     def __init__(self):
         super().__init__()
-        self.compress = ResBlock(1024, 512)
+        self.compress = ResBlock(64, 256)
         #self.up_16_8 = UpsampleBlock(512, 512, 256) # 1/16 -> 1/8
         #self.up_8_4 = UpsampleBlock(256, 256, 256) # 1/8 -> 1/4
 
@@ -32,7 +32,7 @@ class Decoder(nn.Module):
 
         x = self.pred(F.relu(x))
         
-        x = F.interpolate(x, scale_factor=4, mode='bilinear', align_corners=False)
+        x = F.interpolate(x, scale_factor=16, mode='bilinear', align_corners=False)
         return x
 
 
@@ -75,13 +75,16 @@ class SelfAttention(nn.Module):
     def __init__(self, input_dim):
         super(SelfAttention, self).__init__()
         self.input_dim = input_dim
-        self.softmax == F.Softmax(dim=-1)
    
-    def forward(self, k, q, v): # x.shape (batch_size, seq_length, input_dim)
+    def forward(self, k, q, v):
+        k = k.transpose(-2, -1)
         similarity = k @ q
         scaled = similarity / math.sqrt(self.input_dim)
-        attention = self.softmax(scaled)
+        attention = F.softmax(scaled, dim=-1)
+        v = v.transpose(-2, -1)
         out = attention @ v
+        
+        out = out.transpose(-2, -1)
         return out
 
 
@@ -96,10 +99,10 @@ class STCN(nn.Module):
         self.query_encoder = QueryEncoder()
 
         # Projection from f16 feature space to key space
-        self.key_proj = KeyProjection(1024, keydim=64)
+        self.key_proj = KeyProjection(256, keydim=64)
 
         # Compress f16 a bit to use in decoding later on
-        self.key_comp = nn.Conv2d(1024, 512, kernel_size=3, padding=1)
+        self.key_comp = nn.Conv2d(256, 128, kernel_size=3, padding=1)
 
         self.memory = MemoryReader()
         self.decoder = Decoder()
@@ -123,11 +126,13 @@ class STCN(nn.Module):
         f16_thin = self.key_comp(f16)
 
         # B*C*H*W
-        k16 = k16.view(b, *k16.shape[-3:]).contiguous()
+        #k16 = k16.view(b, *k16.shape[-3:]).contiguous()
+        k16 = k16.contiguous()
 
         # B*CHW
         #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
-        f16 = f16.view(b, *f16.shape[-3:])
+        #f16 = f16.view(b, *f16.shape[-3:])
+        f16 = f16
         #f8 = f8.view(b, *f8.shape[-3:])
         #f4 = f4.view(b, *f4.shape[-3:])
 
@@ -142,12 +147,13 @@ class STCN(nn.Module):
         f16_thin = self.key_comp(f16)
 
         # B*C*T*H*W
-        v16 = v16.view(b, *v16.shape[-3:]).contiguous()
+        #v16 = v16.view(b, *v16.shape[-3:]).contiguous()
+        v16 = v16.contiguous()
 
         # B*T*C*H*W
         #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
-        f16 = f16.view(b, *f16.shape[-3:])
-        f16 = f16.view(b, *f16.shape[-3:])
+        #f16 = f16.view(b, *f16.shape[-3:])
+        f16 = f16
         # f8 = f8.view(b, *f8.shape[-3:])
         # f4 = f4.view(b, *f4.shape[-3:])
 
@@ -164,11 +170,13 @@ class STCN(nn.Module):
         f16_thin = self.key_comp(f16)
 
         # B*C*T*H*W
-        q16 = q16.view(b, *q16.shape[-3:]).contiguous()
+        #q16 = q16.view(b, *q16.shape[-3:]).contiguous()
+        q16 = q16.contiguous()
 
         # B*T*C*H*W
         #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
-        f16 = f16.view(b, *f16.shape[-3:])
+        #f16 = f16.view(b, *f16.shape[-3:])
+        f16 = f16
         # f8 = f8.view(b, *f8.shape[-3:])
         # f4 = f4.view(b, *f4.shape[-3:])
 
@@ -184,11 +192,11 @@ class STCN(nn.Module):
         return out
 
 
-    def segment(self, qk16, qv16, qf8, qf4, mk16, mv16, selector=None): 
+    def segment(self, qk16, qv16, mk16, mv16, selector=None): 
         # k16, v16, kf8, kf4, q16, qf16 ???
         #affinity = self.memory.get_affinity(mk16, qk16)
 
-        attention = self.self_attention(qk16, mk16, qv16)
+        #attention = self.self_attention(qk16, mk16, qv16)
         attention_module = SelfAttention(qk16.shape[1])
         attention = attention_module(qk16, mk16, qv16)
 
