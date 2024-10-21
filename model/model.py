@@ -22,9 +22,11 @@ class STCNModel:
         self.single_object = para['single_object']
         self.local_rank = local_rank
 
-        self.STCN = nn.parallel.DistributedDataParallel(
-            STCN(self.single_object).cuda(), 
-            device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
+        # self.STCN = nn.parallel.DistributedDataParallel(
+        #     STCN(self.single_object).cuda(), 
+        #     device_ids=[local_rank], output_device=local_rank, broadcast_buffers=False)
+
+        self.STCN = STCN(self.single_object)
 
         # Setup logger when local_rank=0
         self.logger = logger
