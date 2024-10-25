@@ -143,7 +143,7 @@ class STCNModel:
 
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
-                print(losses)
+                print(losses['total_loss'])
 
                 # Logging
                 if self._do_log:
