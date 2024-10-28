@@ -498,7 +498,7 @@ class SituationalAwarenessDataset(Dataset):
         
         if self.args.seg_mode == 'multiclass': # background channel
             mask[np.sum(mask[...,:2], axis=2) == 0, 2] = 255
-            mask = np.argmax(mask, axis=2)
+            mask = np.argmax(mask, axis=2) #mask shape [600, 800, 3] --> [600, 800]
         
         return mask
     
@@ -569,6 +569,8 @@ class SituationalAwarenessDataset(Dataset):
             offset = int(file.read()) 
         
         full_label_mask = self.get_corrected_label_mask(instance_seg_image, visible_total, awareness_label, offset=offset)
+        # print("mask unique values")
+        # print(np.unique(full_label_mask))
 
         if self.args.ignore_oldclicks:
             ignore_mask = self.get_ignore_mask(instance_seg_image, visible_total, awareness_label, offset, frame_num)
@@ -647,6 +649,7 @@ class SituationalAwarenessDataset(Dataset):
             instance_seg_image = transforms.functional.to_tensor(instance_seg_image)[:self.instseg_channels, :, :]
         
         label_mask_image = transforms.functional.to_tensor(full_label_mask)
+        #print(label_mask_image.shape)
         ignore_mask = torch.from_numpy(ignore_mask)
 
         if self.use_rgb:
