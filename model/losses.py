@@ -32,25 +32,16 @@ class BootstrappedCE(nn.Module):
         self.top_p = top_p
 
     def forward(self, input, target, it):
-        # input_channel1 = input[0, 0]
-        # print(f"Min value: {input_channel1.min()}")
-        # print(f"Max value: {input_channel1.max()}")
-        # input_channel2 = input[0, 1]
-        # print(f"Min value: {input_channel2.min()}")
-        # print(f"Max value: {input_channel2.max()}")
-        # channel = target[0, 0]
-        # print(f"Min value: {channel.min()}")
-        # print(f"Max value: {channel.max()}")
-        print(input.shape)
         input = input.permute(0, 2, 3, 1)
         input = input.reshape(input.shape[0], -1, input.shape[3])
-        print(input.shape)
-        print(target.shape)
+        print("Input shape: ", input.shape)
         # target has shape (N, C, H, W) -- convert to (N, H*W, C)
         target = target.permute(0, 2, 3, 1)
         target = target.reshape(target.shape[0], -1, target.shape[3])
+        #target = target.view(1, 1)
+        #target = target.squeeze(2).squeeze(2)
         #target = target.squeeze(1) # F.cross_entropy expects target to be of shape (), (N, ) or (N, d_1, ..., d_K)
-        print(target.shape)
+        print("Target shape:", target.shape)
 
         if it < self.start_warm:
             return F.cross_entropy(input, target), 1.0
@@ -76,6 +67,8 @@ class LossComputer:
         losses = defaultdict(int)
 
         b, _, _, _ = data['label'].shape
+        print("Label shape")
+        print(data["label"].shape)
         #selector = data.get('selector', None)
 
         # for i in range(1, s):

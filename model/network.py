@@ -23,7 +23,7 @@ class Decoder(nn.Module):
         #self.up_16_8 = UpsampleBlock(512, 512, 256) # 1/16 -> 1/8
         #self.up_8_4 = UpsampleBlock(256, 256, 256) # 1/8 -> 1/4
 
-        self.pred = nn.Conv2d(256, 1, kernel_size=(3,3), padding=(1,1), stride=1)
+        self.pred = nn.Conv2d(256, 3, kernel_size=(3,3), padding=(1,1), stride=1)
 
     def forward(self, f16):
         x = self.compress(f16)
@@ -108,11 +108,12 @@ class STCN(nn.Module):
         self.decoder = Decoder()
 
     def aggregate(self, prob):
-        new_prob = torch.cat([
-            torch.prod(1-prob, dim=1, keepdim=True),
-            prob
-        ], 1).clamp(1e-7, 1-1e-7)
-        logits = torch.log((new_prob /(1-new_prob)))
+        # new_prob = torch.cat([
+        #     torch.prod(1-prob, dim=1, keepdim=True),
+        #     prob
+        # ], 1).clamp(1e-7, 1-1e-7)
+        # logits = torch.log((new_prob /(1-new_prob)))
+        return prob.clamp(-50, 50)
         return logits
 
     def encode_key(self, frame): 
@@ -198,10 +199,10 @@ class STCN(nn.Module):
 
         #attention = self.self_attention(qk16, mk16, qv16)
         attention_module = SelfAttention(qk16.shape[1])
-        attention = attention_module(qk16, mk16, qv16)
+        attention = attention_module(qk16, mk16, qv16) # [16, 64, 38, 50]
 
-        logits = self.decoder(attention)
-        prob = torch.sigmoid(logits)
+        logits = self.decoder(attention) #[16, 1, 608, 800] -- now with decoder change [16, 3, 608, 800]
+        #prob = torch.sigmoid(logits) #[16, 1, 608, 800]
         
         # if self.single_object:
         #     logits = self.decoder(self.memory.readout(affinity, mv16, qv16), qf8, qf4)
@@ -215,8 +216,9 @@ class STCN(nn.Module):
         #     prob = torch.sigmoid(logits)
         #     prob = prob * selector.unsqueeze(2).unsqueeze(2)
 
-        logits = self.aggregate(prob)
-        prob = F.softmax(logits, dim=1)[:, 1:]
+        logits = self.aggregate(logits) #now [16, 3, 608, 800]
+        #prob = F.softmax(logits, dim=1)[:, 1:]
+        prob = F.softmax(logits, dim=1)
 
         return logits, prob
 

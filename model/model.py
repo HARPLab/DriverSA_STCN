@@ -63,13 +63,13 @@ class STCNModel:
                 data[k] = v.cuda(non_blocking=True)
 
         out = {}
-        Fs = data['instance_seg'] #used for Key and Value
-        Qs = data['gaze_heatmap'] #used for Query
-        Ms = data['label'] #Label mask
+        Fs = data['instance_seg'] #used for Key and Value [16, 1, 608, 800]
+        Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
+        Ms = data['label'] #Label mask [16, 1, 608, 800]
 
         with torch.cuda.amp.autocast(enabled=self.para['amp']):
             # key features never change, compute once
-            k16, kf16= self.STCN('encode_key', Fs)
+            k16, kf16= self.STCN('encode_key', Fs)  # [16, 64, 38, 50], [16, 256, 38, 50]
 
             v16, vf16 = self.STCN('encode_value', Fs)
 
