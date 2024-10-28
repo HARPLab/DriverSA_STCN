@@ -32,16 +32,13 @@ class BootstrappedCE(nn.Module):
         self.top_p = top_p
 
     def forward(self, input, target, it):
-        input = input.permute(0, 2, 3, 1)
-        input = input.reshape(input.shape[0], -1, input.shape[3])
-        print("Input shape: ", input.shape)
+        # convert input from (N, C, H, W) to (N, C, H*W)
+        input = input.flatten(2)
         # target has shape (N, C, H, W) -- convert to (N, H*W, C)
         target = target.permute(0, 2, 3, 1)
         target = target.reshape(target.shape[0], -1, target.shape[3])
-        #target = target.view(1, 1)
-        #target = target.squeeze(2).squeeze(2)
-        #target = target.squeeze(1) # F.cross_entropy expects target to be of shape (), (N, ) or (N, d_1, ..., d_K)
-        print("Target shape:", target.shape)
+        # exclude class dimension
+        target = target.squeeze(-1)
 
         if it < self.start_warm:
             return F.cross_entropy(input, target), 1.0
