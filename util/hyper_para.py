@@ -54,7 +54,7 @@ class HyperParameters():
             # Static image pretraining
             self.args['lr'] = none_or_default(self.args['lr'], 1e-5)
             self.args['batch_size'] = none_or_default(self.args['batch_size'], 8)
-            self.args['iterations'] = none_or_default(self.args['iterations'], 300000)
+            self.args['iterations'] = none_or_default(self.args['iterations'], 1000)
             self.args['steps'] = none_or_default(self.args['steps'], [150000])
             self.args['single_object'] = True
         elif self.args['stage'] == 1:

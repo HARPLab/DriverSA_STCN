@@ -64,8 +64,6 @@ class LossComputer:
         losses = defaultdict(int)
 
         b, _, _, _ = data['label'].shape
-        print("Label shape")
-        print(data["label"].shape)
         #selector = data.get('selector', None)
 
         # for i in range(1, s):

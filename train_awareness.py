@@ -14,6 +14,8 @@ from model.model import STCNModel
 from torch.utils.data import DataLoader
 
 from  torch.cuda.amp import autocast
+import wandb
+#import matplotlib.pyplot as plt
 
 def main(args):
     """
@@ -54,9 +56,17 @@ def main(args):
     """
     Determine current/max epoch
     """
+    print('Number of training iterations: ', para['iterations'])
+    print('Training loader size:', len(train_loader))
     total_epoch = math.ceil(para['iterations']/len(train_loader))
     current_epoch = total_iter // len(train_loader)
     print('Number of training epochs (the last epoch might not complete): ', total_epoch)
+
+    """
+    wandb setup
+    """
+    wandb.init(project='STCN Awareness', name="small set training_vis", config=vars(args))
+    #wandb.watch(model, log='all')
 
     """
     Starts training
@@ -79,6 +89,7 @@ def main(args):
         # Train loop
         model.train()
         for data in train_loader:
+            print('Iteration %d' % total_iter)
             with autocast():
                 model.do_pass(data, total_iter)
             total_iter += 1
@@ -92,7 +103,15 @@ def main(args):
     #         model.save(total_iter)
     #     # Clean up
     #     distributed.destroy_process_group()
-
+    losses = model.losses
+    # plt.figure(figsize=(10, 6))  # Create figure with specific size
+    # plt.plot(losses, 'b-', label='Training Loss')  # Plot losses in blue with solid line
+    # plt.xlabel('Iteration')  # X-axis label
+    # plt.ylabel('Loss')  # Y-axis label
+    # plt.title('Training Loss Over Time')  # Title
+    # plt.grid(True)  # Add grid
+    # plt.legend()  # Show legend
+    # plt.show()
 
 
 

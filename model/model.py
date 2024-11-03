@@ -14,6 +14,11 @@ from model.network import STCN
 from model.losses import LossComputer, iou_hooks_mo, iou_hooks_so
 from util.log_integrator import Integrator
 from util.image_saver import pool_pairs
+import torch.nn.functional as F
+import numpy as np
+from PIL import Image
+
+import wandb
 
 
 class STCNModel:
@@ -53,6 +58,8 @@ class STCNModel:
         self.save_model_interval = 50000
         if para['debug']:
             self.report_interval = self.save_im_interval = 1
+        
+        self.losses = []
 
     def do_pass(self, data, it=0):
         # No need to store the gradient outside training
@@ -85,6 +92,29 @@ class STCNModel:
 
             out['logits'] = logits
             out['mask'] = mask
+
+            # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
+            for b in range(data['label'].shape[0]):
+                # get rid of the batch dimension
+                gt_mask = Ms[b].cpu().squeeze()
+                gt_fin  = np.zeros([gt_mask.shape[0], gt_mask.shape[1], 3])
+                gt_fin[gt_mask == 0] = np.array([0, 255, 0])
+                gt_fin[gt_mask == 1] = np.array([255, 0, 0])
+                gt_fin[gt_mask == 2] = np.array([0, 0, 0])
+                logits_b = logits[b].squeeze()
+
+                pr_mask = mask[b].cpu().squeeze().detach().numpy()
+                pr_mask = np.argmax(pr_mask, axis=0)
+                #print(np.unique(pr_mask))
+                pr_fin = np.zeros([pr_mask.shape[0], pr_mask.shape[1], 3])                
+                pr_fin[pr_mask == 0] = np.array([0, 255, 0]) # green for aware
+                pr_fin[pr_mask == 1] = np.array([255, 0, 0]) # red for aware
+                #mask_b = mask[b].squeeze()
+                gt_image = Image.fromarray(np.uint8(gt_fin))
+                #logits_image = F.to_pil_image(logits_b)
+                mask_image = Image.fromarray(np.uint8(pr_fin))
+                wandb.log({'gt_image': wandb.Image(gt_image, caption='Ground Truth Label Mask'), 'mask_image': wandb.Image(mask_image, caption='Predicted Mask')})
+
 
             # if self.single_object:
             #     ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])
@@ -143,30 +173,31 @@ class STCNModel:
 
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
-                print(losses['total_loss'])
+                self.losses.append(losses['total_loss'])
+                wandb.log(losses)
 
                 # Logging
-                if self._do_log:
-                    self.integrator.add_dict(losses)
-                    if self._is_train:
-                        if it % self.save_im_interval == 0 and it != 0:
-                            if self.logger is not None:
-                                images = {**data, **out}
-                                size = (384, 384)
-                                self.logger.log_cv2('train/pairs', pool_pairs(images, size, self.single_object), it)
+                # if self._do_log:
+                #     self.integrator.add_dict(losses)
+                #     if self._is_train:
+                #         if it % self.save_im_interval == 0 and it != 0:
+                #             if self.logger is not None:
+                #                 images = {**data, **out}
+                #                 size = (384, 384)
+                #                 self.logger.log_cv2('train/pairs', pool_pairs(images, size, self.single_object), it)
 
-            if self._is_train:
-                if (it) % self.report_interval == 0 and it != 0:
-                    if self.logger is not None:
-                        self.logger.log_scalar('train/lr', self.scheduler.get_last_lr()[0], it)
-                        self.logger.log_metrics('train', 'time', (time.time()-self.last_time)/self.report_interval, it)
-                    self.last_time = time.time()
-                    self.train_integrator.finalize('train', it)
-                    self.train_integrator.reset_except_hooks()
+            # if self._is_train:
+            #     if (it) % self.report_interval == 0 and it != 0:
+            #         if self.logger is not None:
+            #             self.logger.log_scalar('train/lr', self.scheduler.get_last_lr()[0], it)
+            #             self.logger.log_metrics('train', 'time', (time.time()-self.last_time)/self.report_interval, it)
+            #         self.last_time = time.time()
+            #         self.train_integrator.finalize('train', it)
+            #         self.train_integrator.reset_except_hooks()
 
-                if it % self.save_model_interval == 0 and it != 0:
-                    if self.logger is not None:
-                        self.save(it)
+            #     if it % self.save_model_interval == 0 and it != 0:
+            #         if self.logger is not None:
+            #             self.save(it)
 
             # Backward pass
             # This should be done outside autocast
