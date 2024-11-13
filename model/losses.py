@@ -41,7 +41,7 @@ class BootstrappedCE(nn.Module):
         target = target.squeeze(-1)
 
         if it < self.start_warm:
-            return F.cross_entropy(input, target), 1.0
+            return F.cross_entropy(input, target, weight=torch.tensor([1, 1, 10**(-2)]).to("cuda:0")), 1.0
 
         raw_loss = F.cross_entropy(input, target, reduction='none').view(-1)
         num_pixels = raw_loss.numel()
