@@ -1,6 +1,6 @@
 # Training the model on small version of awareness_dataset
 import torch
-import torch.distributed as distributed
+torch.cuda.empty_cache()
 import numpy as np
 import random
 # import datetime
@@ -41,7 +41,7 @@ def main(args):
     """
     Load dataset
     """
-    episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "abd-21"]
+    episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
     train_batch_size = args.batch_size
 
     data = []
@@ -53,19 +53,25 @@ def main(args):
     # train_sampler = torch.utils.data.distributed.DistributedSampler(small_dataset, shuffle=True)
     train_loader = DataLoader(small_dataset, batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
 
+    val_ep = "cbdr8-54"
+    val_dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, val_ep, args)
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.num_workers)
+    
+
     """
     Determine current/max epoch
     """
     print('Number of training iterations: ', para['iterations'])
     print('Training loader size:', len(train_loader))
-    total_epoch = math.ceil(para['iterations']/len(train_loader))
+    #total_epoch = math.ceil(para['iterations']/len(train_loader))
+    total_epoch = 100
     current_epoch = total_iter // len(train_loader)
     print('Number of training epochs (the last epoch might not complete): ', total_epoch)
 
     """
     wandb setup
     """
-    wandb.init(project='STCN Awareness', name="small set training_vis", config=vars(args))
+    wandb.init(project='STCN Awareness', name="small set train_val_vis_class-weighing_1e-2", config=vars(args))
     #wandb.watch(model, log='all')
 
     """
@@ -94,8 +100,26 @@ def main(args):
                 model.do_pass(data, total_iter)
             total_iter += 1
 
-            if total_iter >= para['iterations']:
-                break
+            # if total_iter >= para['iterations']:
+            #     break
+        # validation every 2 epochs
+        if e % 2 == 0:
+            model.val()
+            print("Validation")
+            total_val_loss = 0
+            val_iter = 0
+            with torch.no_grad():
+                for data_val in val_loader:
+                    print('Validation Iteration %d' % val_iter)
+                    with autocast():
+                        curr_loss = model.val_pass(data_val, total_iter)
+                    total_val_loss += curr_loss
+                    val_iter += 1
+            
+            val_loss = total_val_loss / len(val_loader)
+            wandb.log({'val_loss': val_loss})
+
+                
     if not para['debug'] and total_iter>100:
         model.save(total_iter)
     # finally:
@@ -103,15 +127,6 @@ def main(args):
     #         model.save(total_iter)
     #     # Clean up
     #     distributed.destroy_process_group()
-    losses = model.losses
-    # plt.figure(figsize=(10, 6))  # Create figure with specific size
-    # plt.plot(losses, 'b-', label='Training Loss')  # Plot losses in blue with solid line
-    # plt.xlabel('Iteration')  # X-axis label
-    # plt.ylabel('Loss')  # Y-axis label
-    # plt.title('Training Loss Over Time')  # Title
-    # plt.grid(True)  # Add grid
-    # plt.legend()  # Show legend
-    # plt.show()
 
 
 
@@ -158,7 +173,7 @@ if __name__ == "__main__":
     args.add_argument("--num-workers", type=int, default=12)
     args.add_argument("--batch-size", type=int, default=16)
     args.add_argument("--num-val-episodes", type=int, default=5)
-    args.add_argument("--num-epochs", type=int, default=40)
+    args.add_argument("--num-epochs", type=int, default=10)
     args.add_argument("--lr", type=float, default=0.0001)
     args.add_argument("--wandb", action='store_false')
     args.add_argument("--dont-log-images", action='store_true')

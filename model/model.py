@@ -61,10 +61,7 @@ class STCNModel:
         
         self.losses = []
 
-    def do_pass(self, data, it=0):
-        # No need to store the gradient outside training
-        torch.set_grad_enabled(self._is_train)
-
+    def val_pass(self, data, it=0):
         for k, v in data.items():
             if type(v) != list and type(v) != dict and type(v) != int:
                 data[k] = v.cuda(non_blocking=True)
@@ -101,6 +98,59 @@ class STCNModel:
                 gt_fin[gt_mask == 0] = np.array([0, 255, 0])
                 gt_fin[gt_mask == 1] = np.array([255, 0, 0])
                 gt_fin[gt_mask == 2] = np.array([0, 0, 0])
+
+                pr_mask = mask[b].cpu().squeeze().detach().numpy()
+                pr_mask = np.argmax(pr_mask, axis=0)
+                #print(np.unique(pr_mask))
+                pr_fin = np.zeros([pr_mask.shape[0], pr_mask.shape[1], 3])                
+                pr_fin[pr_mask == 0] = np.array([0, 255, 0]) # green for aware
+                pr_fin[pr_mask == 1] = np.array([255, 0, 0]) # red for aware
+                #mask_b = mask[b].squeeze()
+                gt_image = Image.fromarray(np.uint8(gt_fin))
+                #logits_image = F.to_pil_image(logits_b)
+                mask_image = Image.fromarray(np.uint8(pr_fin))
+                wandb.log({'val_gt_image': wandb.Image(gt_image, caption='Val Ground Truth Label Mask'), 'val_mask_image': wandb.Image(mask_image, caption='Val Predicted Mask')})
+
+            losses = self.loss_computer.compute({**data, **out}, it)
+            #val_losses = {'val_loss': losses['loss'], 'val_p': losses['p'], 'val_total_loss': losses['total_loss'], 'val_hide_iou/i': losses['hide_iou/i'], 'val_hide_iou/u': losses['hide_iou/u']}
+            val_losses = losses['loss']
+            # wandb.log(val_losses)
+            return val_losses
+            
+    def do_pass(self, data, it=0):
+        # No need to store the gradient outside training
+        torch.set_grad_enabled(self._is_train)
+
+        for k, v in data.items():
+            if type(v) != list and type(v) != dict and type(v) != int:
+                data[k] = v.cuda(non_blocking=True)
+
+        out = {}
+        Fs = data['instance_seg'] #used for Key and Value [16, 1, 608, 800]
+        Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
+        Ms = data['label'] #Label mask [16, 1, 608, 800]
+
+        with torch.cuda.amp.autocast(enabled=self.para['amp']):
+            # key features never change, compute once
+            k16, kf16= self.STCN('encode_key', Fs)  # [16, 64, 38, 50], [16, 256, 38, 50]
+
+            v16, vf16 = self.STCN('encode_value', Fs)
+
+            q16, qf16= self.STCN('encode_query', Qs)
+
+            logits, mask = self.STCN('segment', k16, v16, q16, qf16)
+
+            out['logits'] = logits
+            out['mask'] = mask
+
+            # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
+            for b in range(data['label'].shape[0]):
+                # get rid of the batch dimension
+                gt_mask = Ms[b].cpu().squeeze()
+                gt_fin  = np.zeros([gt_mask.shape[0], gt_mask.shape[1], 3])
+                gt_fin[gt_mask == 0] = np.array([0, 255, 0])
+                gt_fin[gt_mask == 1] = np.array([255, 0, 0])
+                gt_fin[gt_mask == 2] = np.array([0, 0, 0])
                 logits_b = logits[b].squeeze()
 
                 pr_mask = mask[b].cpu().squeeze().detach().numpy()
@@ -115,89 +165,10 @@ class STCNModel:
                 mask_image = Image.fromarray(np.uint8(pr_fin))
                 wandb.log({'gt_image': wandb.Image(gt_image, caption='Ground Truth Label Mask'), 'mask_image': wandb.Image(mask_image, caption='Predicted Mask')})
 
-
-            # if self.single_object:
-            #     ref_v = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0])
-
-            #     # Segment frame 1 with frame 0
-            #     prev_logits, prev_mask = self.STCN('segment', 
-            #             k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
-            #             k16[:,:,0:1], ref_v)
-            #     prev_v = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask)
-
-            #     values = torch.cat([ref_v, prev_v], 2)
-
-            #     del ref_v
-
-            #     # Segment frame 2 with frame 0 and 1
-            #     this_logits, this_mask = self.STCN('segment', 
-            #             k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
-            #             k16[:,:,0:2], values)
-
-            #     out['mask_1'] = prev_mask
-            #     out['mask_2'] = this_mask
-            #     out['logits_1'] = prev_logits
-            #     out['logits_2'] = this_logits
-            # else:
-            #     sec_Ms = data['sec_gt']
-            #     selector = data['selector']
-
-            #     ref_v1 = self.STCN('encode_value', Fs[:,0], kf16[:,0], Ms[:,0], sec_Ms[:,0])
-            #     ref_v2 = self.STCN('encode_value', Fs[:,0], kf16[:,0], sec_Ms[:,0], Ms[:,0])
-            #     ref_v = torch.stack([ref_v1, ref_v2], 1)
-
-            #     # Segment frame 1 with frame 0
-            #     prev_logits, prev_mask = self.STCN('segment', 
-            #             k16[:,:,1], kf16_thin[:,1], kf8[:,1], kf4[:,1], 
-            #             k16[:,:,0:1], ref_v, selector)
-                
-            #     prev_v1 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,0:1], prev_mask[:,1:2])
-            #     prev_v2 = self.STCN('encode_value', Fs[:,1], kf16[:,1], prev_mask[:,1:2], prev_mask[:,0:1])
-            #     prev_v = torch.stack([prev_v1, prev_v2], 1)
-            #     values = torch.cat([ref_v, prev_v], 3)
-
-            #     del ref_v
-
-            #     # Segment frame 2 with frame 0 and 1
-            #     this_logits, this_mask = self.STCN('segment', 
-            #             k16[:,:,2], kf16_thin[:,2], kf8[:,2], kf4[:,2], 
-            #             k16[:,:,0:2], values, selector)
-
-            #     out['mask_1'] = prev_mask[:,0:1]
-            #     out['mask_2'] = this_mask[:,0:1]
-            #     out['sec_mask_1'] = prev_mask[:,1:2]
-            #     out['sec_mask_2'] = this_mask[:,1:2]
-
-            #     out['logits_1'] = prev_logits
-            #     out['logits_2'] = this_logits
-
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
                 self.losses.append(losses['total_loss'])
                 wandb.log(losses)
-
-                # Logging
-                # if self._do_log:
-                #     self.integrator.add_dict(losses)
-                #     if self._is_train:
-                #         if it % self.save_im_interval == 0 and it != 0:
-                #             if self.logger is not None:
-                #                 images = {**data, **out}
-                #                 size = (384, 384)
-                #                 self.logger.log_cv2('train/pairs', pool_pairs(images, size, self.single_object), it)
-
-            # if self._is_train:
-            #     if (it) % self.report_interval == 0 and it != 0:
-            #         if self.logger is not None:
-            #             self.logger.log_scalar('train/lr', self.scheduler.get_last_lr()[0], it)
-            #             self.logger.log_metrics('train', 'time', (time.time()-self.last_time)/self.report_interval, it)
-            #         self.last_time = time.time()
-            #         self.train_integrator.finalize('train', it)
-            #         self.train_integrator.reset_except_hooks()
-
-            #     if it % self.save_model_interval == 0 and it != 0:
-            #         if self.logger is not None:
-            #             self.save(it)
 
             # Backward pass
             # This should be done outside autocast
