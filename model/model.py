@@ -73,6 +73,7 @@ class STCNModel:
         Fs = data['instance_seg'] #used for Key and Value [16, 1, 608, 800]
         Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
         Ms = data['label'] #Label mask [16, 1, 608, 800]
+        inst_metric = data['inst_metrics']
 
         with torch.cuda.amp.autocast(enabled=self.para['amp']):
             # key features never change, compute once
@@ -92,6 +93,10 @@ class STCNModel:
 
             out['logits'] = logits
             out['mask'] = mask
+            
+            #object level accuracy
+            acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask, Ms, inst_metric)
+            wandb.log({'val_object_level_accuracy': acc})
 
             # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
             for b in range(data['label'].shape[0]):

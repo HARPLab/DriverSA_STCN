@@ -103,18 +103,18 @@ def main(args):
             # if total_iter >= para['iterations']:
             #     break
         # validation every 2 epochs
-        # if e % 2 == 0:
-        #     model.val()
-        #     print("Validation")
-        #     total_val_loss = 0
-        #     with torch.no_grad():
-        #         for data_val in val_loader:
-        #             with autocast():
-        #                 curr_loss = model.val_pass(data_val, total_iter)
-        #             total_val_loss += curr_loss
+        if e % 2 == 0:
+            model.val()
+            print("Validation")
+            total_val_loss = 0
+            with torch.no_grad():
+                for data_val in val_loader:
+                    with autocast():
+                        curr_loss = model.val_pass(data_val, total_iter)
+                    total_val_loss += curr_loss
             
-        #     val_loss = total_val_loss / len(val_loader)
-        #     wandb.log({'val_loss': val_loss})
+            val_loss = total_val_loss / len(val_loader)
+            wandb.log({'val_loss': val_loss})
 
                 
     if not para['debug'] and total_iter>100:
