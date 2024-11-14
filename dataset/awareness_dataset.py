@@ -639,7 +639,9 @@ class SituationalAwarenessDataset(Dataset):
         # Convert all images to tensors
         if self.use_rgb:
             rgb_image = transforms.functional.to_tensor(rgb_image) # only use this function to convert PIL images to tensors, normalizes between 0 and 1
-            
+        
+        inst_img_metric_transform = transforms.Compose([transforms.PILToTensor()])
+        instance_seg_image_metrics = inst_img_metric_transform(instance_seg_image).float()
         
         # change instance segmentation images
         if self.instseg_channels == 1:
@@ -662,6 +664,8 @@ class SituationalAwarenessDataset(Dataset):
         
         final_ignore_mask = ignore_mask
 
+        final_inst_images_for_metrics = instance_seg_image_metrics
+
         padded_tensor = torch.nn.functional.pad(final_input_image, (0, 0, 4, 4), mode='constant', value=0)
         padded_label_mask_image_tensor = torch.nn.functional.pad(final_label_mask_image, (0, 0, 4, 4), mode='constant', value=0)
         padded_final_ignore_mask = torch.nn.functional.pad(final_ignore_mask.permute(2, 0, 1), (0, 0, 4, 4), mode='constant', value=0)
@@ -672,12 +676,15 @@ class SituationalAwarenessDataset(Dataset):
         padded_instance_seg_image = torch.nn.functional.pad(instance_seg_image, (0, 0, 4, 4), mode='constant', value=0)
         padded_gaze_heatmap = torch.nn.functional.pad(gaze_heatmap, (0, 0, 4, 4), mode='constant', value=0)
 
+        padded_inst_images_for_metrics = torch.nn.functional.pad(final_inst_images_for_metrics, (0, 0, 4, 4), mode='constant', value=0)
+
         data = {
             'input': padded_tensor,
             'label': padded_label_mask_image_tensor,
             'ignore_mask': padded_final_ignore_mask,
             'gaze_heatmap': padded_gaze_heatmap,
-            'instance_seg': padded_instance_seg_image
+            'instance_seg': padded_instance_seg_image,
+            'inst_metrics': padded_inst_images_for_metrics
         }
 
         if self.use_rgb:
