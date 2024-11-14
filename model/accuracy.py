@@ -1,15 +1,19 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
-class object_level_Accuracy(nn.Module):
-    __name__ = "object_level_accuracy"
+class object_level_Accuracy():
 
     def __init__(self, threshold=0.5, remove_small_objects = True, activation=None, ignore_channels=None):
-        self.__name__ = "object_level_accuracy"
         self.remove_small_objects = remove_small_objects
 
     def forward(self, y_pr_raw, y_gt, y_inst):
         
+        #y = F.one_hot(y.view(y.shape[0], y.shape[2], y.shape[3]), num_classes=y_pred.size(1)).permute(0, 3, 1, 2).float()
+
+        #y_inst = F.one_hot(y_inst.view(y_inst.shape[0], y_inst.shape[2], y_inst.shape[3]), num_classes=y_pr_raw.size(1)).permute(0, 3, 1, 2).float()
+        y_gt = F.one_hot(y_gt.view(y_gt.shape[0], y_gt.shape[2], y_gt.shape[3]), num_classes=y_pr_raw.size(1)).permute(0, 3, 1, 2).float()
+
         # get object_ids
         # get_mask for each vehicle id
         # get prediction for each object

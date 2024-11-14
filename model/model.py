@@ -17,6 +17,7 @@ from util.image_saver import pool_pairs
 import torch.nn.functional as F
 import numpy as np
 from PIL import Image
+from model.accuracy import object_level_Accuracy
 
 import wandb
 
@@ -60,6 +61,8 @@ class STCNModel:
             self.report_interval = self.save_im_interval = 1
         
         self.losses = []
+
+        self.acc_metric = object_level_Accuracy()
 
     def val_pass(self, data, it=0):
         for k, v in data.items():
@@ -129,6 +132,7 @@ class STCNModel:
         Fs = data['instance_seg'] #used for Key and Value [16, 1, 608, 800]
         Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
         Ms = data['label'] #Label mask [16, 1, 608, 800]
+        inst_metric = data['inst_metrics']
 
         with torch.cuda.amp.autocast(enabled=self.para['amp']):
             # key features never change, compute once
@@ -142,6 +146,11 @@ class STCNModel:
 
             out['logits'] = logits
             out['mask'] = mask
+
+            #object level accuracy
+            acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask, Ms, inst_metric)
+            wandb.log({'object_level_accuracy': acc})
+
 
             # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
             for b in range(data['label'].shape[0]):
