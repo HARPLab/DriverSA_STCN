@@ -41,21 +41,27 @@ def main(args):
     """
     Load dataset
     """
-    episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
+    episode_list = sorted(os.listdir(args.raw_data), reverse=False)
+
+    val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
+    train_episodes = list(set(episode_list) - set(val_episodes))
     train_batch_size = args.batch_size
 
     data = []
-    for ep in episodes:
+    for ep in train_episodes:
             dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
             data.append(dataset)
             #concat_val_sample_weights += dataset.get_sample_weights()
-    small_dataset = torch.utils.data.ConcatDataset(data)
+    train_dataset = torch.utils.data.ConcatDataset(data)
     # train_sampler = torch.utils.data.distributed.DistributedSampler(small_dataset, shuffle=True)
-    train_loader = DataLoader(small_dataset, batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
+    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
 
-    val_ep = "cbdr8-54"
-    val_dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, val_ep, args)
-    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=args.num_workers)
+    val_data = []
+    for ep in val_episodes:
+        val_dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
+        val_data.append(dataset)
+    val_dataset = torch.utils.data.ConcatDataset(val_data)
+    val_loader = DataLoader(val_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
     
 
     """
@@ -142,7 +148,7 @@ if __name__ == "__main__":
 
     # data set config params
     args.add_argument("--sensor-config-file", type=str, default='sensor_config.ini')
-    args.add_argument("--raw-data", type=str, default='/media/storage/raw_data_corrected')
+    args.add_argument("--raw-data", type=str, default='/home/harpadmin/raw_data_corrected')
     args.add_argument("--use-rgb", action='store_true')
     args.add_argument("--instseg-channels", type=int, default=1)
     args.add_argument("--middle-andsides", action='store_true')
