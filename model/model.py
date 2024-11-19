@@ -23,7 +23,7 @@ import wandb
 
 
 class STCNModel:
-    def __init__(self, para, logger=None, save_path=None, local_rank=0, world_size=1):
+    def __init__(self, para, logger=None, save_path="model_saves", local_rank=0, world_size=1):
         self.para = para
         self.single_object = para['single_object']
         self.local_rank = local_rank
@@ -96,7 +96,7 @@ class STCNModel:
             
             #object level accuracy
             acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask, Ms, inst_metric)
-            wandb.log({'val_object_level_accuracy': acc})
+            #wandb.log({'val_object_level_accuracy': acc})
 
             # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
             for b in range(data['label'].shape[0]):
@@ -117,13 +117,15 @@ class STCNModel:
                 gt_image = Image.fromarray(np.uint8(gt_fin))
                 #logits_image = F.to_pil_image(logits_b)
                 mask_image = Image.fromarray(np.uint8(pr_fin))
-                wandb.log({'val_gt_image': wandb.Image(gt_image, caption='Val Ground Truth Label Mask'), 'val_mask_image': wandb.Image(mask_image, caption='Val Predicted Mask')})
+
+                heatmap_image = Qs[b].cpu().squeeze()
+                wandb.log({'val_gt_image': wandb.Image(gt_image, caption='Val Ground Truth Label Mask'), 'val_mask_image': wandb.Image(mask_image, caption='Val Predicted Mask'), 'val_heatmap_image': wandb.Image(heatmap_image, caption='Val Gaze Heatmap')})
 
             losses = self.loss_computer.compute({**data, **out}, it)
             #val_losses = {'val_loss': losses['loss'], 'val_p': losses['p'], 'val_total_loss': losses['total_loss'], 'val_hide_iou/i': losses['hide_iou/i'], 'val_hide_iou/u': losses['hide_iou/u']}
             val_losses = losses['loss']
             # wandb.log(val_losses)
-            return val_losses
+            return val_losses, acc
             
     def do_pass(self, data, it=0):
         # No need to store the gradient outside training
@@ -177,7 +179,9 @@ class STCNModel:
                 gt_image = Image.fromarray(np.uint8(gt_fin))
                 #logits_image = F.to_pil_image(logits_b)
                 mask_image = Image.fromarray(np.uint8(pr_fin))
-                wandb.log({'gt_image': wandb.Image(gt_image, caption='Ground Truth Label Mask'), 'mask_image': wandb.Image(mask_image, caption='Predicted Mask')})
+
+                heatmap_image = Qs[b].cpu().squeeze()
+                wandb.log({'gt_image': wandb.Image(gt_image, caption='Ground Truth Label Mask'), 'mask_image': wandb.Image(mask_image, caption='Predicted Mask'), 'heatmap_image': wandb.Image(heatmap_image, caption='Gaze Heatmap')})
 
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
