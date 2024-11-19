@@ -86,6 +86,7 @@ def main(args):
     """
     # Need this to select random bases in different workers
     # np.random.seed(np.random.randint(2**30-1) + local_rank*100)
+    model.save_checkpoint(total_iter)
     for e in range(current_epoch, total_epoch): 
         print('Epoch %d/%d' % (e, total_epoch))
         # if para['stage']!=0 and e!=total_epoch and e>=increase_skip_epoch[0]:
@@ -107,6 +108,9 @@ def main(args):
                 model.do_pass(data, total_iter)
             total_iter += 1
 
+            if total_iter % 1000 == 0:
+                model.save(total_iter)
+
             # if total_iter >= para['iterations']:
             #     break
         # validation every 2 epochs
@@ -126,14 +130,12 @@ def main(args):
             val_acc = total_val_acc / len(val_loader)
             wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
         
-        if total_iter % 1000 == 0:
-            model.save(total_iter)
         
 
 
                 
     if not para['debug'] and total_iter>100:
-        model.save(total_iter)
+        model.save_checkpoint(total_iter)
     # finally:
     #     if not para['debug'] and model.logger is not None and total_iter>5000:
     #         model.save(total_iter)
