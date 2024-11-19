@@ -23,7 +23,7 @@ import wandb
 
 
 class STCNModel:
-    def __init__(self, para, logger=None, save_path="model_saves", local_rank=0, world_size=1):
+    def __init__(self, para, logger=None, save_path="model_saves/", local_rank=0, world_size=1):
         self.para = para
         self.single_object = para['single_object']
         self.local_rank = local_rank
@@ -36,7 +36,7 @@ class STCNModel:
 
         # Setup logger when local_rank=0
         self.logger = logger
-        self.save_path = save_path
+        self.save_path = "model_saves/"
         if logger is not None:
             self.last_time = time.time()
         self.train_integrator = Integrator(self.logger, distributed=True, local_rank=local_rank, world_size=world_size)
@@ -209,7 +209,7 @@ class STCNModel:
         
         os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
         model_path = self.save_path + ('_%s.pth' % it)
-        torch.save(self.STCN.module.state_dict(), model_path)
+        torch.save(self.STCN.state_dict(), model_path)
         print('Model saved to %s.' % model_path)
 
         self.save_checkpoint(it)
@@ -223,7 +223,7 @@ class STCNModel:
         checkpoint_path = self.save_path + '_checkpoint.pth'
         checkpoint = { 
             'it': it,
-            'network': self.STCN.module.state_dict(),
+            'network': self.STCN.state_dict(),
             'optimizer': self.optimizer.state_dict(),
             'scheduler': self.scheduler.state_dict()}
         torch.save(checkpoint, checkpoint_path)
