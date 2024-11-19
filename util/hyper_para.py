@@ -12,6 +12,8 @@ class HyperParameters():
         parser.add_argument('--benchmark', action='store_true')
         parser.add_argument('--no_amp', action='store_true')
 
+        parser.add_argument("--device", type=str, default='cuda')
+
         # Data parameters
         parser.add_argument('--static_root', help='Static training data root', default='../static')
         parser.add_argument('--bl_root', help='Blender training data root', default='../BL30K')

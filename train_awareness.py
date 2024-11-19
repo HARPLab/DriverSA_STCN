@@ -15,6 +15,7 @@ from torch.utils.data import DataLoader
 
 from  torch.cuda.amp import autocast
 import wandb
+import os
 #import matplotlib.pyplot as plt
 
 def main(args):
@@ -59,7 +60,7 @@ def main(args):
     val_data = []
     for ep in val_episodes:
         val_dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
-        val_data.append(dataset)
+        val_data.append(val_dataset)
     val_dataset = torch.utils.data.ConcatDataset(val_data)
     val_loader = DataLoader(val_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
     
@@ -77,7 +78,7 @@ def main(args):
     """
     wandb setup
     """
-    wandb.init(project='STCN Awareness', name="small set train_acc_vis_class-weighing_1e-2", config=vars(args))
+    wandb.init(project='STCN Awareness', name="full_training_set_batch_size_64", config=vars(args))
     #wandb.watch(model, log='all')
 
     """
@@ -113,14 +114,22 @@ def main(args):
             model.val()
             print("Validation")
             total_val_loss = 0
+            total_val_acc = 0
             with torch.no_grad():
                 for data_val in val_loader:
                     with autocast():
-                        curr_loss = model.val_pass(data_val, total_iter)
+                        curr_loss, curr_acc = model.val_pass(data_val, total_iter)
                     total_val_loss += curr_loss
+                    total_val_acc += curr_acc
             
             val_loss = total_val_loss / len(val_loader)
-            wandb.log({'val_loss': val_loss})
+            val_acc = total_val_acc / len(val_loader)
+            wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
+        
+        if total_iter % 1000 == 0:
+            model.save(total_iter)
+        
+
 
                 
     if not para['debug'] and total_iter>100:
@@ -174,7 +183,7 @@ if __name__ == "__main__":
     args.add_argument("--device", type=str, default='cuda')
     args.add_argument("--random-seed", type=int, default=999)
     args.add_argument("--num-workers", type=int, default=12)
-    args.add_argument("--batch-size", type=int, default=16)
+    args.add_argument("--batch_size", type=int, default=16)
     args.add_argument("--num-val-episodes", type=int, default=5)
     args.add_argument("--num-epochs", type=int, default=10)
     args.add_argument("--lr", type=float, default=0.0001)
