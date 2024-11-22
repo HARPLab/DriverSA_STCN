@@ -18,6 +18,7 @@ import torch.nn.functional as F
 import numpy as np
 from PIL import Image
 from model.accuracy import object_level_Accuracy
+from model.visualization import get_viz
 
 import wandb
 
@@ -25,7 +26,7 @@ import wandb
 class STCNModel:
     def __init__(self, para, logger=None, save_path="model_saves/", local_rank=0, world_size=1):
         self.para = para
-        self.single_object = para['single_object']
+        self.single_object = para.single_object
         self.local_rank = local_rank
 
         # self.STCN = nn.parallel.DistributedDataParallel(
@@ -48,16 +49,16 @@ class STCNModel:
 
         self.train()
         self.optimizer = optim.Adam(filter(
-            lambda p: p.requires_grad, self.STCN.parameters()), lr=para['lr'], weight_decay=1e-7)
-        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, para['steps'], para['gamma'])
-        if para['amp']:
+            lambda p: p.requires_grad, self.STCN.parameters()), lr=para.lr, weight_decay=1e-7)
+        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, para.steps, para.gamma)
+        if para.amp:
             self.scaler = torch.cuda.amp.GradScaler()
 
         # Logging info
         self.report_interval = 100
         self.save_im_interval = 800
         self.save_model_interval = 50000
-        if para['debug']:
+        if para.debug:
             self.report_interval = self.save_im_interval = 1
         
         self.losses = []
@@ -75,7 +76,7 @@ class STCNModel:
         Ms = data['label'] #Label mask [16, 1, 608, 800]
         inst_metric = data['inst_metrics']
 
-        with torch.cuda.amp.autocast(enabled=self.para['amp']):
+        with torch.cuda.amp.autocast(enabled=self.para.amp):
             # key features never change, compute once
             k16, kf16= self.STCN('encode_key', Fs)  # [16, 64, 38, 50], [16, 256, 38, 50]
 
@@ -101,24 +102,27 @@ class STCNModel:
             # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
             for b in range(data['label'].shape[0]):
                 # get rid of the batch dimension
-                gt_mask = Ms[b].cpu().squeeze()
-                gt_fin  = np.zeros([gt_mask.shape[0], gt_mask.shape[1], 3])
-                gt_fin[gt_mask == 0] = np.array([0, 255, 0])
-                gt_fin[gt_mask == 1] = np.array([255, 0, 0])
-                gt_fin[gt_mask == 2] = np.array([0, 0, 0])
+                # gt_mask = Ms[b].cpu().squeeze()
+                # gt_fin  = np.zeros([gt_mask.shape[0], gt_mask.shape[1], 3])
+                # gt_fin[gt_mask == 0] = np.array([0, 255, 0])
+                # gt_fin[gt_mask == 1] = np.array([255, 0, 0])
+                # gt_fin[gt_mask == 2] = np.array([0, 0, 0])
 
-                pr_mask = mask[b].cpu().squeeze().detach().numpy()
-                pr_mask = np.argmax(pr_mask, axis=0)
-                #print(np.unique(pr_mask))
-                pr_fin = np.zeros([pr_mask.shape[0], pr_mask.shape[1], 3])                
-                pr_fin[pr_mask == 0] = np.array([0, 255, 0]) # green for aware
-                pr_fin[pr_mask == 1] = np.array([255, 0, 0]) # red for aware
-                #mask_b = mask[b].squeeze()
-                gt_image = Image.fromarray(np.uint8(gt_fin))
-                #logits_image = F.to_pil_image(logits_b)
-                mask_image = Image.fromarray(np.uint8(pr_fin))
+                # pr_mask = mask[b].cpu().squeeze().detach().numpy()
+                # pr_mask = np.argmax(pr_mask, axis=0)
+                # #print(np.unique(pr_mask))
+                # pr_fin = np.zeros([pr_mask.shape[0], pr_mask.shape[1], 3])                
+                # pr_fin[pr_mask == 0] = np.array([0, 255, 0]) # green for aware
+                # pr_fin[pr_mask == 1] = np.array([255, 0, 0]) # red for aware
+                # #mask_b = mask[b].squeeze()
+                # gt_image = Image.fromarray(np.uint8(gt_fin))
+                # #logits_image = F.to_pil_image(logits_b)
+                # mask_image = Image.fromarray(np.uint8(pr_fin))
 
-                heatmap_image = Qs[b].cpu().squeeze()
+
+                # heatmap_image = Qs[b].cpu().squeeze()
+                gt_image, mask_image, heatmap_image = get_viz(b, Ms, Qs, mask, data['input'])
+
                 wandb.log({'val_gt_image': wandb.Image(gt_image, caption='Val Ground Truth Label Mask'), 'val_mask_image': wandb.Image(mask_image, caption='Val Predicted Mask'), 'val_heatmap_image': wandb.Image(heatmap_image, caption='Val Gaze Heatmap')})
 
             losses = self.loss_computer.compute({**data, **out}, it)
@@ -141,7 +145,7 @@ class STCNModel:
         Ms = data['label'] #Label mask [16, 1, 608, 800]
         inst_metric = data['inst_metrics']
 
-        with torch.cuda.amp.autocast(enabled=self.para['amp']):
+        with torch.cuda.amp.autocast(enabled=self.para.amp):
             # key features never change, compute once
             k16, kf16= self.STCN('encode_key', Fs)  # [16, 64, 38, 50], [16, 256, 38, 50]
 
@@ -162,25 +166,27 @@ class STCNModel:
             # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
             for b in range(data['label'].shape[0]):
                 # get rid of the batch dimension
-                gt_mask = Ms[b].cpu().squeeze()
-                gt_fin  = np.zeros([gt_mask.shape[0], gt_mask.shape[1], 3])
-                gt_fin[gt_mask == 0] = np.array([0, 255, 0])
-                gt_fin[gt_mask == 1] = np.array([255, 0, 0])
-                gt_fin[gt_mask == 2] = np.array([0, 0, 0])
-                logits_b = logits[b].squeeze()
+                # gt_mask = Ms[b].cpu().squeeze()
+                # gt_fin  = np.zeros([gt_mask.shape[0], gt_mask.shape[1], 3])
+                # gt_fin[gt_mask == 0] = np.array([0, 255, 0])
+                # gt_fin[gt_mask == 1] = np.array([255, 0, 0])
+                # gt_fin[gt_mask == 2] = np.array([0, 0, 0])
+                # logits_b = logits[b].squeeze()
 
-                pr_mask = mask[b].cpu().squeeze().detach().numpy()
-                pr_mask = np.argmax(pr_mask, axis=0)
-                #print(np.unique(pr_mask))
-                pr_fin = np.zeros([pr_mask.shape[0], pr_mask.shape[1], 3])                
-                pr_fin[pr_mask == 0] = np.array([0, 255, 0]) # green for aware
-                pr_fin[pr_mask == 1] = np.array([255, 0, 0]) # red for aware
-                #mask_b = mask[b].squeeze()
-                gt_image = Image.fromarray(np.uint8(gt_fin))
-                #logits_image = F.to_pil_image(logits_b)
-                mask_image = Image.fromarray(np.uint8(pr_fin))
+                # pr_mask = mask[b].cpu().squeeze().detach().numpy()
+                # pr_mask = np.argmax(pr_mask, axis=0)
+                # #print(np.unique(pr_mask))
+                # pr_fin = np.zeros([pr_mask.shape[0], pr_mask.shape[1], 3])                
+                # pr_fin[pr_mask == 0] = np.array([0, 255, 0]) # green for aware
+                # pr_fin[pr_mask == 1] = np.array([255, 0, 0]) # red for aware
+                # #mask_b = mask[b].squeeze()
+                # gt_image = Image.fromarray(np.uint8(gt_fin))
+                # #logits_image = F.to_pil_image(logits_b)
+                # mask_image = Image.fromarray(np.uint8(pr_fin))
 
-                heatmap_image = Qs[b].cpu().squeeze()
+                # heatmap_image = Qs[b].cpu().squeeze()
+                gt_image, mask_image, heatmap_image = get_viz(b, Ms, Qs, mask, data['input'])
+                
                 wandb.log({'gt_image': wandb.Image(gt_image, caption='Ground Truth Label Mask'), 'mask_image': wandb.Image(mask_image, caption='Predicted Mask'), 'heatmap_image': wandb.Image(heatmap_image, caption='Gaze Heatmap')})
 
             if self._do_log or self._is_train:
@@ -193,7 +199,7 @@ class STCNModel:
             # but I trained it like this and it worked fine
             # so I am keeping it this way for reference
             self.optimizer.zero_grad(set_to_none=True)
-            if self.para['amp']:
+            if self.para.amp:
                 self.scaler.scale(losses['total_loss']).backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()

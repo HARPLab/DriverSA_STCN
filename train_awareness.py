@@ -26,16 +26,16 @@ def main(args):
     print('CUDA Device count: ', torch.cuda.device_count())
 
     # Parse command line arguments
-    para = HyperParameters()
-    para.parse()
+    # para = HyperParameters()
+    # para.parse()
 
-    if para['benchmark']:
-        torch.backends.cudnn.benchmark = True
+    # if para['benchmark']:
+    #     torch.backends.cudnn.benchmark = True
 
     """
     Model related
     """
-    model = STCNModel(para).train()
+    model = STCNModel(args).train()
 
     total_iter = 0
 
@@ -44,8 +44,10 @@ def main(args):
     """
     episode_list = sorted(os.listdir(args.raw_data), reverse=False)
 
-    val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
-    train_episodes = list(set(episode_list) - set(val_episodes))
+    #val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
+    #train_episodes = list(set(episode_list) - set(val_episodes))
+    val_episodes = ["cbdr8-54"]
+    train_episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
     train_batch_size = args.batch_size
 
     data = []
@@ -68,7 +70,7 @@ def main(args):
     """
     Determine current/max epoch
     """
-    print('Number of training iterations: ', para['iterations'])
+    print('Number of training iterations: ', args.iterations)
     print('Training loader size:', len(train_loader))
     #total_epoch = math.ceil(para['iterations']/len(train_loader))
     total_epoch = 100
@@ -78,7 +80,7 @@ def main(args):
     """
     wandb setup
     """
-    wandb.init(project='STCN Awareness', name="full_training_set_batch_size_64", config=vars(args))
+    wandb.init(project='STCN Awareness', name="small_set_viz_testing", config=vars(args))
     #wandb.watch(model, log='all')
 
     """
@@ -107,9 +109,7 @@ def main(args):
             with autocast():
                 model.do_pass(data, total_iter)
             total_iter += 1
-
-            if total_iter % 1000 == 0:
-                model.save(total_iter)
+                
 
             # if total_iter >= para['iterations']:
             #     break
@@ -129,12 +129,15 @@ def main(args):
             val_loss = total_val_loss / len(val_loader)
             val_acc = total_val_acc / len(val_loader)
             wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
+            
+        # Save model checkpoint at the end of each epoch
+        model.save_checkpoint(total_iter)
         
         
 
 
-                
-    if not para['debug'] and total_iter>100:
+    # Save checkpoint at the end            
+    if not args.debug:
         model.save_checkpoint(total_iter)
     # finally:
     #     if not para['debug'] and model.logger is not None and total_iter>5000:
@@ -159,7 +162,7 @@ if __name__ == "__main__":
 
     # data set config params
     args.add_argument("--sensor-config-file", type=str, default='sensor_config.ini')
-    args.add_argument("--raw-data", type=str, default='/home/harpadmin/raw_data_corrected')
+    args.add_argument("--raw-data", type=str, default='/media/storage/raw_data_corrected')
     args.add_argument("--use-rgb", action='store_true')
     args.add_argument("--instseg-channels", type=int, default=1)
     args.add_argument("--middle-andsides", action='store_true')
@@ -167,7 +170,7 @@ if __name__ == "__main__":
     args.add_argument("--history-sample-rate", type=float, default=4.0)
     args.add_argument("--gaze-gaussian-sigma", type=float, default=5.0)
     args.add_argument("--gaze-fade", action='store_true')
-    args.add_argument("--gaze-format", choices=['dot', 'blob'], default='blob')
+    args.add_argument("--gaze-format", choices=['dot', 'blob'], default='dot')
     args.add_argument("--lr-decay-epochstep", type=int, default=10)
     args.add_argument("--lr-decay-factor", type=int, default=10)
     args.add_argument("--sample-clicks", choices=['post_click', 'pre_excl', 'both', ''], 
@@ -187,14 +190,36 @@ if __name__ == "__main__":
     args.add_argument("--num-workers", type=int, default=12)
     args.add_argument("--batch_size", type=int, default=16)
     args.add_argument("--num-val-episodes", type=int, default=5)
-    args.add_argument("--num-epochs", type=int, default=10)
+    args.add_argument("--num-epochs", type=int, default=20)
     args.add_argument("--lr", type=float, default=0.0001)
     args.add_argument("--wandb", action='store_false')
     args.add_argument("--dont-log-images", action='store_true')
     args.add_argument("--image-save-freq", type=int, default=150)
     args.add_argument("--unfix-valset", action='store_true')
     
-    args.add_argument("--run-name", type=str, default="")    
+    #STCN Hyper params
+    args.add_argument('--benchmark', action='store_true')
+    args.add_argument('--amp', action='store_false')
+    args.add_argument("--single_object", default=True)
+
+    # Generic learning parameters
+    args.add_argument('-i', '--iterations',default=1000, type=int)
+    args.add_argument('--steps',  nargs="*", default=[150000])
+    args.add_argument('--gamma', help='LR := LR*gamma at every decay step', default=0.1, type=float)
+
+    # Loading
+    args.add_argument('--load_network', help='Path to pretrained network weight only')
+    args.add_argument('--load_model', help='Path to the model file, including network, optimizer and such')
+
+    # Logging information
+    args.add_argument('--id', help='Experiment UNIQUE id, use NULL to disable logging to tensorboard', default='NULL')
+    args.add_argument('--debug', help='Debug mode which logs information more often', action='store_true')
+
+    # Multiprocessing parameters, not set by users
+    args.add_argument('--local_rank', default=0, type=int, help='Local rank of this process')
+    
+    args.add_argument("--run-name", type=str, default="")
+        
     args = args.parse_args()
 
     main(args)    
