@@ -70,11 +70,9 @@ def main(args):
     """
     Determine current/max epoch
     """
-    print('Number of training iterations: ', args.iterations)
     print('Training loader size:', len(train_loader))
-    #total_epoch = math.ceil(para['iterations']/len(train_loader))
-    total_epoch = 100
-    current_epoch = total_iter // len(train_loader)
+    total_epoch = args.num_epochs
+    current_epoch = 0
     print('Number of training epochs (the last epoch might not complete): ', total_epoch)
 
     """
@@ -89,18 +87,11 @@ def main(args):
     # Need this to select random bases in different workers
     # np.random.seed(np.random.randint(2**30-1) + local_rank*100)
     model.save_checkpoint(total_iter)
-    for e in range(current_epoch, total_epoch): 
+    for e in range(total_epoch): 
         print('Epoch %d/%d' % (e, total_epoch))
-        # if para['stage']!=0 and e!=total_epoch and e>=increase_skip_epoch[0]:
-        #     while e >= increase_skip_epoch[0]:
-        #         cur_skip = skip_values[0]
-        #         skip_values = skip_values[1:]
-        #         increase_skip_epoch = increase_skip_epoch[1:]
-        #     print('Increasing skip to: ', cur_skip)
-        #     train_sampler, train_loader = renew_loader(cur_skip)
 
-        # Crucial for randomness! 
-        # train_sampler.set_epoch(e)
+        total_train_loss = 0
+        total_train_acc = 0
 
         # Train loop
         model.train()
@@ -110,9 +101,6 @@ def main(args):
                 model.do_pass(data, total_iter)
             total_iter += 1
                 
-
-            # if total_iter >= para['iterations']:
-            #     break
         # validation every 2 epochs
         if e % 2 == 0:
             model.val()
@@ -134,19 +122,17 @@ def main(args):
         model.save_checkpoint(total_iter)
         
         
-
-
     # Save checkpoint at the end            
     if not args.debug:
         model.save_checkpoint(total_iter)
-    # finally:
-    #     if not para['debug'] and model.logger is not None and total_iter>5000:
-    #         model.save(total_iter)
-    #     # Clean up
-    #     distributed.destroy_process_group()
 
-
-
+    
+    # Vizualize the results and log to wandb
+    with torch.no_grad():
+        for train_data in train_loader:
+            model.viz_pass(train_data, total_iter)
+        for val_data in val_loader:
+            model.viz_pass(val_data, total_iter)
 
 if __name__ == "__main__":
 
