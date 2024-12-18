@@ -36,4 +36,13 @@ def get_viz(b, Ms, Qs, mask, input_image):
 
     #heatmap_image = Qs[b].cpu().squeeze()
 
+    fig, axes = plt.subplots(1, 3, figsize=(12, 6))
+    axes[0].imshow(gt_image)
+    axes[0].set_title('Ground Truth')
+    axes[1].imshow(mask_image)
+    axes[1].set_title('Prediction')
+    axes[2].imshow(gaze_heatmap)
+    axes[2].set_title('Gaze Heatmap')
+    plt.tight_layout()
+    return fig
     return gt_image, mask_image, gaze_heatmap
