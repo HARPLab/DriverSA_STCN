@@ -32,7 +32,7 @@ class Decoder(nn.Module):
 
         x = self.pred(F.relu(x))
         
-        x = F.interpolate(x, scale_factor=16, mode='bilinear', align_corners=False)
+        x = F.interpolate(x, size=(600, 800), mode='bilinear', align_corners=False)
         return x
 
 
@@ -201,8 +201,8 @@ class STCN(nn.Module):
         attention_module = SelfAttention(qk16.shape[1])
         attention = attention_module(qk16, mk16, qv16) # [16, 64, 38, 50]
 
-        logits = self.decoder(attention) #[16, 1, 608, 800] -- now with decoder change [16, 3, 608, 800]
-        #prob = torch.sigmoid(logits) #[16, 1, 608, 800]
+        logits = self.decoder(attention) #[16, 1, 600, 800] -- now with decoder change [16, 3, 600, 800]
+        #prob = torch.sigmoid(logits) #[16, 1, 600, 800]
         
         # if self.single_object:
         #     logits = self.decoder(self.memory.readout(affinity, mv16, qv16), qf8, qf4)
@@ -216,7 +216,7 @@ class STCN(nn.Module):
         #     prob = torch.sigmoid(logits)
         #     prob = prob * selector.unsqueeze(2).unsqueeze(2)
 
-        logits = self.aggregate(logits) #now [16, 3, 608, 800]
+        logits = self.aggregate(logits) #now [16, 3, 600, 800]
         #prob = F.softmax(logits, dim=1)[:, 1:]
         prob = F.softmax(logits, dim=1)
 

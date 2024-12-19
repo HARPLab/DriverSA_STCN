@@ -154,9 +154,9 @@ class STCNModel:
                 data[k] = v.cuda(non_blocking=True)
 
         out = {}
-        Fs = data['instance_seg'] #used for Key and Value [16, 1, 608, 800]
-        Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
-        Ms = data['label'] #Label mask [16, 1, 608, 800]
+        Fs = data['instance_seg'] #used for Key and Value [16, 1, 600, 800]
+        Qs = data['gaze_heatmap'] #used for Query [16, 1, 600, 800]
+        Ms = data['label'] #Label mask [16, 1, 600, 800]
         inst_metric = data['inst_metrics']
 
         with torch.cuda.amp.autocast(enabled=self.para.amp):
@@ -174,7 +174,7 @@ class STCNModel:
 
             #object level accuracy
             acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask, Ms, inst_metric)
-            wandb.log({'object_level_accuracy': acc})
+            #wandb.log({'object_level_accuracy': acc})
 
 
             # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
@@ -188,8 +188,8 @@ class STCNModel:
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
                 self.losses.append(losses['total_loss'])
-                wandb.log(losses)
-
+                #wandb.log(losses)
+            
             # Backward pass
             # This should be done outside autocast
             # but I trained it like this and it worked fine
@@ -203,6 +203,8 @@ class STCNModel:
                 losses['total_loss'].backward() 
                 self.optimizer.step()
             self.scheduler.step()
+
+            return losses['loss'], acc
 
     def save(self, it):
         if self.save_path is None:

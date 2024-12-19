@@ -667,31 +667,42 @@ class SituationalAwarenessDataset(Dataset):
 
         final_inst_images_for_metrics = instance_seg_image_metrics
 
-        padded_tensor = torch.nn.functional.pad(final_input_image, (0, 0, 4, 4), mode='constant', value=0)
-        padded_label_mask_image_tensor = torch.nn.functional.pad(final_label_mask_image, (0, 0, 4, 4), mode='constant', value=0)
-        padded_final_ignore_mask = torch.nn.functional.pad(final_ignore_mask.permute(2, 0, 1), (0, 0, 4, 4), mode='constant', value=0)
+        # padded_tensor = torch.nn.functional.pad(final_input_image, (0, 0, 4, 4), mode='constant', value=0)
+        # padded_label_mask_image_tensor = torch.nn.functional.pad(final_label_mask_image, (0, 0, 4, 4), mode='constant', value=0)
+        # padded_final_ignore_mask = torch.nn.functional.pad(final_ignore_mask.permute(2, 0, 1), (0, 0, 4, 4), mode='constant', value=0)
         
-        if self.use_rgb:
-            padded_rgb_image = torch.nn.functional.pad(rgb_image, (0, 0, 4, 4), mode='constant', value=0)
+        # if self.use_rgb:
+        #     padded_rgb_image = torch.nn.functional.pad(rgb_image, (0, 0, 4, 4), mode='constant', value=0)
 
-        padded_instance_seg_image = torch.nn.functional.pad(instance_seg_image, (0, 0, 4, 4), mode='constant', value=0)
-        padded_gaze_heatmap = torch.nn.functional.pad(gaze_heatmap, (0, 0, 4, 4), mode='constant', value=0)
+        # padded_instance_seg_image = torch.nn.functional.pad(instance_seg_image, (0, 0, 4, 4), mode='constant', value=0)
+        # padded_gaze_heatmap = torch.nn.functional.pad(gaze_heatmap, (0, 0, 4, 4), mode='constant', value=0)
 
-        padded_inst_images_for_metrics = torch.nn.functional.pad(final_inst_images_for_metrics, (0, 0, 4, 4), mode='constant', value=0)
+        # padded_inst_images_for_metrics = torch.nn.functional.pad(final_inst_images_for_metrics, (0, 0, 4, 4), mode='constant', value=0)
 
+        # data = {
+        #     'input': padded_tensor,
+        #     'label': padded_label_mask_image_tensor,
+        #     'ignore_mask': padded_final_ignore_mask,
+        #     'gaze_heatmap': padded_gaze_heatmap,
+        #     'instance_seg': padded_instance_seg_image,
+        #     'inst_metrics': padded_inst_images_for_metrics
+        # }
+
+        # if self.use_rgb:
+        #     data['rgb'] = padded_rgb_image
+        
+    
         data = {
-            'input': padded_tensor,
-            'label': padded_label_mask_image_tensor,
-            'ignore_mask': padded_final_ignore_mask,
-            'gaze_heatmap': padded_gaze_heatmap,
-            'instance_seg': padded_instance_seg_image,
-            'inst_metrics': padded_inst_images_for_metrics
+            'input': final_input_image,
+            'label': final_label_mask_image,
+            'ignore_mask': final_ignore_mask.permute(2, 0, 1),
+            'gaze_heatmap': gaze_heatmap,
+            'instance_seg': instance_seg_image,
+            'inst_metrics': final_inst_images_for_metrics
         }
 
-        if self.use_rgb:
-            data['rgb'] = padded_rgb_image
-        
         return data
+
 
         #return padded_tensor, padded_label_mask_image_tensor, padded_final_ignore_mask
 

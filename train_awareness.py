@@ -98,9 +98,14 @@ def main(args):
         for data in train_loader:
             print('Iteration %d' % total_iter)
             with autocast():
-                model.do_pass(data, total_iter)
+                curr_loss, curr_acc = model.do_pass(data, total_iter)
+            total_train_loss += curr_loss
+            total_train_acc += curr_acc
             total_iter += 1
-                
+        train_loss = total_train_loss / len(train_loader)
+        train_acc = total_train_acc / len(train_loader)
+        wandb.log({'train_loss': train_loss, 'train_object_level_accuracy': train_acc})
+        
         # validation every 2 epochs
         if e % 2 == 0:
             model.val()
@@ -130,9 +135,9 @@ def main(args):
     # Vizualize the results and log to wandb
     with torch.no_grad():
         for train_data in train_loader:
-            model.viz_pass(train_data, total_iter)
+            model.viz_pass(train_data, "train", total_iter)
         for val_data in val_loader:
-            model.viz_pass(val_data, total_iter)
+            model.viz_pass(val_data, "val", total_iter)
 
 if __name__ == "__main__":
 
