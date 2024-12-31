@@ -7,6 +7,7 @@ Compute loss, back-prop, update parameters, logging, etc.
 import os
 import time
 import torch
+import random
 import torch.nn as nn
 import torch.optim as optim
 
@@ -97,7 +98,7 @@ class STCNModel:
                 else:
                     wandb.log({'Training Sample' : viz_image})
 
-    def val_pass(self, data, it=0):
+    def val_pass(self, data, epoch, it=0):
         for k, v in data.items():
             if type(v) != list and type(v) != dict and type(v) != int:
                 data[k] = v.cuda(non_blocking=True)
@@ -138,6 +139,14 @@ class STCNModel:
             #     wandb.log(val_viz_image)
 
                 #wandb.log({'val_gt_image': wandb.Image(gt_image, caption='Val Ground Truth Label Mask'), 'val_mask_image': wandb.Image(mask_image, caption='Val Predicted Mask'), 'val_heatmap_image': wandb.Image(heatmap_image, caption='Val Gaze Heatmap')})
+            if data['label'].shape[0] <= 5:
+                indices = range(data['label'].shape[0])
+            else:
+                indices = random.sample(range(data['label'].shape[0]), 5)
+            for b in indices:
+                viz_image = get_viz(b, Ms, Qs, mask, data['input'])
+                wandb.log({f'Validation Sample - Epoch {epoch}' : viz_image})
+
 
             losses = self.loss_computer.compute({**data, **out}, it)
             #val_losses = {'val_loss': losses['loss'], 'val_p': losses['p'], 'val_total_loss': losses['total_loss'], 'val_hide_iou/i': losses['hide_iou/i'], 'val_hide_iou/u': losses['hide_iou/u']}
@@ -145,7 +154,7 @@ class STCNModel:
             # wandb.log(val_losses)
             return val_losses, acc
             
-    def do_pass(self, data, it=0):
+    def do_pass(self, data, epoch, it=0):
         # No need to store the gradient outside training
         torch.set_grad_enabled(self._is_train)
 
@@ -184,6 +193,18 @@ class STCNModel:
             #     wandb.log(viz_image)
                 
                 #wandb.log({'gt_image': wandb.Image(gt_image, caption='Ground Truth Label Mask'), 'mask_image': wandb.Image(mask_image, caption='Predicted Mask'), 'heatmap_image': wandb.Image(heatmap_image, caption='Gaze Heatmap')})
+            # for b in range(data['label'].shape[0]):
+            #     viz_image = get_viz(b, Ms, Qs, mask, data['input'])
+            #     wandb.log({f'Training Sample - Epoch {epoch}' : viz_image})
+
+            if data['label'].shape[0] <= 5:
+                indices = range(data['label'].shape[0])
+            else:
+                indices = random.sample(range(data['label'].shape[0]), 5)
+            for b in indices:
+                viz_image = get_viz(b, Ms, Qs, mask, data['input'])
+                wandb.log({f'Training Sample - Epoch {epoch}' : viz_image})
+
 
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
@@ -245,7 +266,7 @@ class STCNModel:
         scheduler = checkpoint['scheduler']
 
         map_location = 'cuda:%d' % self.local_rank
-        self.STCN.module.load_state_dict(network)
+        self.STCN.load_state_dict(network)
         self.optimizer.load_state_dict(optimizer)
         self.scheduler.load_state_dict(scheduler)
 

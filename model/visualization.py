@@ -44,5 +44,9 @@ def get_viz(b, Ms, Qs, mask, input_image):
     axes[2].imshow(gaze_heatmap)
     axes[2].set_title('Gaze Heatmap')
     plt.tight_layout()
-    return fig
-    return gt_image, mask_image, gaze_heatmap
+    figure = fig
+
+    plt.close('all')
+
+    return figure
+    #return gt_image, mask_image, gaze_heatmap

@@ -7,6 +7,8 @@ import random
 import argparse 
 from os import path
 import math
+from tqdm import tqdm
+
 from dataset.awareness_dataset import SituationalAwarenessDataset
 # from util.logger import TensorboardLogger
 from util.hyper_para import HyperParameters
@@ -36,6 +38,8 @@ def main(args):
     Model related
     """
     model = STCNModel(args).train()
+    # For loading a checkpoint to continue training
+    #model.load_model("model_saves/_checkpoint_epoch11_run12_20.pth")
 
     total_iter = 0
 
@@ -44,10 +48,10 @@ def main(args):
     """
     episode_list = sorted(os.listdir(args.raw_data), reverse=False)
 
-    #val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
-    #train_episodes = list(set(episode_list) - set(val_episodes))
-    val_episodes = ["cbdr8-54"]
-    train_episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
+    val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
+    train_episodes = list(set(episode_list) - set(val_episodes))
+    # val_episodes = ["cbdr8-54"]
+    # train_episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
     train_batch_size = args.batch_size
 
     data = []
@@ -73,12 +77,13 @@ def main(args):
     print('Training loader size:', len(train_loader))
     total_epoch = args.num_epochs
     current_epoch = 0
+    #current_epoch = 12
     print('Number of training epochs (the last epoch might not complete): ', total_epoch)
 
     """
     wandb setup
     """
-    wandb.init(project='STCN Awareness', name="small_set_viz_testing", config=vars(args))
+    wandb.init(entity='harplab-SA', project='dreyevr_stcn', name="restart_full_set_training_epochs_20_batch_size_24", config=vars(args))
     #wandb.watch(model, log='all')
 
     """
@@ -87,7 +92,7 @@ def main(args):
     # Need this to select random bases in different workers
     # np.random.seed(np.random.randint(2**30-1) + local_rank*100)
     model.save_checkpoint(total_iter)
-    for e in range(total_epoch): 
+    for e in range(current_epoch, total_epoch): 
         print('Epoch %d/%d' % (e, total_epoch))
 
         total_train_loss = 0
@@ -95,10 +100,9 @@ def main(args):
 
         # Train loop
         model.train()
-        for data in train_loader:
-            print('Iteration %d' % total_iter)
+        for data in tqdm(train_loader, desc=f"Epoch {e}", leave=False):
             with autocast():
-                curr_loss, curr_acc = model.do_pass(data, total_iter)
+                curr_loss, curr_acc = model.do_pass(data, e, total_iter)
             total_train_loss += curr_loss
             total_train_acc += curr_acc
             total_iter += 1
@@ -115,7 +119,7 @@ def main(args):
             with torch.no_grad():
                 for data_val in val_loader:
                     with autocast():
-                        curr_loss, curr_acc = model.val_pass(data_val, total_iter)
+                        curr_loss, curr_acc = model.val_pass(data_val, e, total_iter)
                     total_val_loss += curr_loss
                     total_val_acc += curr_acc
             
@@ -153,7 +157,7 @@ if __name__ == "__main__":
 
     # data set config params
     args.add_argument("--sensor-config-file", type=str, default='sensor_config.ini')
-    args.add_argument("--raw-data", type=str, default='/media/storage/raw_data_corrected')
+    args.add_argument("--raw-data", type=str, default='/home/harpadmin/raw_data_corrected')
     args.add_argument("--use-rgb", action='store_true')
     args.add_argument("--instseg-channels", type=int, default=1)
     args.add_argument("--middle-andsides", action='store_true')
