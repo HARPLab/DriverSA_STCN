@@ -18,7 +18,7 @@ from util.image_saver import pool_pairs
 import torch.nn.functional as F
 import numpy as np
 from PIL import Image
-from model.accuracy import object_level_Accuracy
+from model.accuracy import object_level_Accuracy, object_level_Precision, object_level_Recall
 from model.visualization import get_viz
 
 import wandb
@@ -65,8 +65,10 @@ class STCNModel:
         self.losses = []
 
         self.acc_metric = object_level_Accuracy()
+        self.prec_metric = object_level_Precision()
+        self.rec_metric = object_level_Recall()
     
-    def viz_pass(self, data, set, it=0):
+    def viz_pass(self, data, set_type, it=0):
         for k, v in data.items():
             if type(v) != list and type(v) != dict and type(v) != int:
                 data[k] = v.cuda(non_blocking=True)
@@ -93,10 +95,12 @@ class STCNModel:
             # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
             for b in range(data['label'].shape[0]):
                 viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-                if set == 'val':
+                if set_type == 'val':
                     wandb.log({'Validation Sample' : viz_image})
-                else:
+                elif set_type == 'train':
                     wandb.log({'Training Sample' : viz_image})
+                else:
+                    wandb.log({'Testing Sample' : viz_image})
 
     def val_pass(self, data, epoch, it=0):
         for k, v in data.items():
@@ -117,42 +121,34 @@ class STCNModel:
 
             q16, qf16= self.STCN('encode_query', Qs)
 
-            #TODO: finish this once query encoder is implemented
-            # would also need to modify the segementation part of the network
-
-            # segment args: query-key, query-value, query-f8, query-f4, memory-key, memory-value
-            # k16, v16, kf8, kf4, q16, qf16 ???
 
             logits, mask = self.STCN('segment', k16, v16, q16, qf16)
+            mask = mask.detach()
 
             out['logits'] = logits
             out['mask'] = mask
             
             #object level accuracy
-            acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask, Ms, inst_metric)
+            acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask.cpu(), Ms.cpu(), inst_metric)
+            # precision, preds, gts = self.prec_metric.forward(mask.cpu(), Ms.cpu(), inst_metric)
+            # recall, preds, gts = self.rec_metric.forward(mask.cpu(), Ms.cpu(), inst_metric)
             #wandb.log({'val_object_level_accuracy': acc})
 
-            # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
-            # for b in range(data['label'].shape[0]):
-            #     val_viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-
-            #     wandb.log(val_viz_image)
-
                 #wandb.log({'val_gt_image': wandb.Image(gt_image, caption='Val Ground Truth Label Mask'), 'val_mask_image': wandb.Image(mask_image, caption='Val Predicted Mask'), 'val_heatmap_image': wandb.Image(heatmap_image, caption='Val Gaze Heatmap')})
-            if data['label'].shape[0] <= 5:
-                indices = range(data['label'].shape[0])
-            else:
-                indices = random.sample(range(data['label'].shape[0]), 5)
-            for b in indices:
-                viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-                wandb.log({f'Validation Sample - Epoch {epoch}' : viz_image})
+            # if data['label'].shape[0] <= 5:
+            #     indices = range(data['label'].shape[0])
+            # else:
+            #     indices = random.sample(range(data['label'].shape[0]), 5)
+            # for b in indices:
+            #     viz_image = get_viz(b, Ms, Qs, mask, data['input'])
+            #     wandb.log({f'Validation Sample - Epoch {epoch}' : viz_image})
 
 
             losses = self.loss_computer.compute({**data, **out}, it)
             #val_losses = {'val_loss': losses['loss'], 'val_p': losses['p'], 'val_total_loss': losses['total_loss'], 'val_hide_iou/i': losses['hide_iou/i'], 'val_hide_iou/u': losses['hide_iou/u']}
-            val_losses = losses['loss']
+            val_losses = losses['loss'].detach().cpu().item()
             # wandb.log(val_losses)
-            return val_losses, acc
+            return val_losses, acc, preds, gts, raw_preds
             
     def do_pass(self, data, epoch, it=0):
         # No need to store the gradient outside training
@@ -184,18 +180,6 @@ class STCNModel:
             #object level accuracy
             acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask, Ms, inst_metric)
             #wandb.log({'object_level_accuracy': acc})
-
-
-            # log the ground truth label masks and the predicted logits and mask for each sample in the batch as images into wandb
-            # for b in range(data['label'].shape[0]):
-            #     viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-
-            #     wandb.log(viz_image)
-                
-                #wandb.log({'gt_image': wandb.Image(gt_image, caption='Ground Truth Label Mask'), 'mask_image': wandb.Image(mask_image, caption='Predicted Mask'), 'heatmap_image': wandb.Image(heatmap_image, caption='Gaze Heatmap')})
-            # for b in range(data['label'].shape[0]):
-            #     viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-            #     wandb.log({f'Training Sample - Epoch {epoch}' : viz_image})
 
             if data['label'].shape[0] <= 5:
                 indices = range(data['label'].shape[0])
@@ -309,4 +293,5 @@ class STCNModel:
         self._do_log = False
         self.STCN.eval()
         return self
-
+    
+    

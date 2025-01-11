@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.metrics import recall_score, precision_score, average_precision_score
 
 class object_level_Accuracy():
 
@@ -56,3 +57,80 @@ class object_level_Accuracy():
         if len(accs) == 0:
             return 0, preds, gts, raw_preds, obj_ids
         return sum(accs)/len(accs), preds, gts, raw_preds, obj_ids
+
+
+class object_level_Precision():
+
+    def __init__(self, threshold=0.5, activation=None, ignore_channels=None, **kwargs):
+        super().__init__(**kwargs)
+
+    def forward(self, y_pr_raw, y_gt, y_inst):
+        
+        # get object_ids 
+        # get_mask for each vehicle id
+        # get prediction for each object
+        # calculate accuracy 
+        y_gt = F.one_hot(y_gt.view(y_gt.shape[0], y_gt.shape[2], y_gt.shape[3]), num_classes=y_pr_raw.size(1)).permute(0, 3, 1, 2).float()
+
+        y_pr = torch.argmax(y_pr_raw[:, :2, ...], dim=1)
+        y_gt = torch.argmax(y_gt, dim=1)
+        # allowed_inds = y_inst[:, 0, :, :] == 10 or y_inst[:, 0, :, :] == 4 or y_inst[:, 0, :, :] == 23
+        ids_tensor = y_inst[:, 1, :, :] + y_inst[:, 2, :, :]*256
+        accs = []
+        preds = []
+        gts = []
+        for b in range(ids_tensor.shape[0]):
+            ids = ids_tensor[b].unique()
+            for id in ids:
+                inds = ids_tensor[b] == id
+                y_pr_obj = y_pr[b][inds]
+                y_gt_obj = y_gt[b][inds]
+                obj_pr = torch.mode(y_pr_obj)[0].item()
+                obj_gt = torch.mode(y_gt_obj)[0].item()
+                if obj_gt == 2:
+                    continue
+                # obj_gt = y_gt_obj[0].item()
+                # print(id, obj_pr, obj_gt)
+                accs.append(obj_pr == obj_gt)
+                preds.append(obj_pr)
+                gts.append(obj_gt)
+        return precision_score(gts, preds), preds, gts
+    
+class object_level_Recall():
+
+    def __init__(self, threshold=0.5, activation=None, ignore_channels=None, **kwargs):
+        super().__init__(**kwargs)
+
+    def forward(self, y_pr_raw, y_gt, y_inst):
+        
+        # get object_ids 
+        # get_mask for each vehicle id
+        # get prediction for each object
+        # calculate accuracy 
+        y_gt = F.one_hot(y_gt.view(y_gt.shape[0], y_gt.shape[2], y_gt.shape[3]), num_classes=y_pr_raw.size(1)).permute(0, 3, 1, 2).float()
+
+        y_pr = torch.argmax(y_pr_raw[:, :2, ...], dim=1)
+        y_gt = torch.argmax(y_gt, dim=1)
+        # allowed_inds = y_inst[:, 0, :, :] == 10 or y_inst[:, 0, :, :] == 4 or y_inst[:, 0, :, :] == 23
+        ids_tensor = y_inst[:, 1, :, :] + y_inst[:, 2, :, :]*256
+        accs = []
+        preds = []
+        gts = []
+        for b in range(ids_tensor.shape[0]):
+            ids = ids_tensor[b].unique()
+            # print(ids)
+            for id in ids:
+                inds = ids_tensor[b] == id
+                y_pr_obj = y_pr[b][inds]
+                y_gt_obj = y_gt[b][inds]
+                obj_pr = torch.mode(y_pr_obj)[0].item()
+                obj_gt = torch.mode(y_gt_obj)[0].item()
+                if obj_gt == 2:
+                    continue
+                # obj_gt = y_gt_obj[0].item()
+                # print(id, obj_pr, obj_gt)
+                accs.append(obj_pr == obj_gt)
+                preds.append(obj_pr)
+                gts.append(obj_gt)
+        
+        return recall_score(gts, preds), preds, gts
