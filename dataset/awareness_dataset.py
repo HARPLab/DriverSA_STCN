@@ -248,7 +248,6 @@ class SituationalAwarenessDataset(Dataset):
         self.instseg_channels = args.instseg_channels
         self.images_dir = Path(os.path.join(self.raw_data_dir, self.episode, "images"))
         aw_df_file_name = os.path.join(self.raw_data_dir, self.episode, 'rec_parse-awdata.json')
-        print(aw_df_file_name)
         
         self.awareness_df = pd.read_json(aw_df_file_name, orient='index')
         self.args = args

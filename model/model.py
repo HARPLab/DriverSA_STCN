@@ -101,6 +101,42 @@ class STCNModel:
                     wandb.log({'Training Sample' : viz_image})
                 else:
                     wandb.log({'Testing Sample' : viz_image})
+    
+    def test_pass(self, data, it=0):
+        for k, v in data.items():
+            if type(v) != list and type(v) != dict and type(v) != int:
+                data[k] = v.cuda(non_blocking=True)
+
+        out = {}
+        Fs = data['instance_seg'] #used for Key and Value [16, 1, 608, 800]
+        Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
+        Ms = data['label'] #Label mask [16, 1, 608, 800]
+        inst_metric = data['inst_metrics']
+
+        with torch.cuda.amp.autocast(enabled=self.para.amp):
+            # key features never change, compute once
+            k16, kf16= self.STCN('encode_key', Fs)  # [16, 64, 38, 50], [16, 256, 38, 50]
+
+            v16, vf16 = self.STCN('encode_value', Fs)
+
+            q16, qf16= self.STCN('encode_query', Qs)
+
+
+            logits, mask = self.STCN('segment', k16, v16, q16, qf16)
+            mask = mask.detach()
+
+            out['logits'] = logits
+            out['mask'] = mask
+            
+            #object level accuracy
+            acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask.cpu(), Ms.cpu(), inst_metric)
+
+
+            losses = self.loss_computer.compute({**data, **out}, it)
+            #val_losses = {'val_loss': losses['loss'], 'val_p': losses['p'], 'val_total_loss': losses['total_loss'], 'val_hide_iou/i': losses['hide_iou/i'], 'val_hide_iou/u': losses['hide_iou/u']}
+            val_losses = losses['loss'].detach().cpu().item()
+            # wandb.log(val_losses)
+            return val_losses, acc, preds, gts, raw_preds
 
     def val_pass(self, data, epoch, it=0):
         for k, v in data.items():
@@ -135,13 +171,13 @@ class STCNModel:
             #wandb.log({'val_object_level_accuracy': acc})
 
                 #wandb.log({'val_gt_image': wandb.Image(gt_image, caption='Val Ground Truth Label Mask'), 'val_mask_image': wandb.Image(mask_image, caption='Val Predicted Mask'), 'val_heatmap_image': wandb.Image(heatmap_image, caption='Val Gaze Heatmap')})
-            # if data['label'].shape[0] <= 5:
-            #     indices = range(data['label'].shape[0])
-            # else:
-            #     indices = random.sample(range(data['label'].shape[0]), 5)
-            # for b in indices:
-            #     viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-            #     wandb.log({f'Validation Sample - Epoch {epoch}' : viz_image})
+            if data['label'].shape[0] <= 5:
+                indices = range(data['label'].shape[0])
+            else:
+                indices = random.sample(range(data['label'].shape[0]), 5)
+            for b in indices:
+                viz_image = get_viz(b, Ms, Qs, mask, data['input'])
+                wandb.log({f'Validation Sample - Epoch {epoch}' : viz_image})
 
 
             losses = self.loss_computer.compute({**data, **out}, it)
@@ -163,6 +199,7 @@ class STCNModel:
         Qs = data['gaze_heatmap'] #used for Query [16, 1, 600, 800]
         Ms = data['label'] #Label mask [16, 1, 600, 800]
         inst_metric = data['inst_metrics']
+        ignore_mask = data['ignore_mask']
 
         with torch.cuda.amp.autocast(enabled=self.para.amp):
             # key features never change, compute once
@@ -174,25 +211,16 @@ class STCNModel:
 
             logits, mask = self.STCN('segment', k16, v16, q16, qf16)
 
-            out['logits'] = logits
+            out['logits'] = logits 
             out['mask'] = mask
 
             #object level accuracy
             acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask, Ms, inst_metric)
             #wandb.log({'object_level_accuracy': acc})
 
-            if data['label'].shape[0] <= 5:
-                indices = range(data['label'].shape[0])
-            else:
-                indices = random.sample(range(data['label'].shape[0]), 5)
-            for b in indices:
-                viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-                wandb.log({f'Training Sample - Epoch {epoch}' : viz_image})
-
-
             if self._do_log or self._is_train:
                 losses = self.loss_computer.compute({**data, **out}, it)
-                self.losses.append(losses['total_loss'])
+                #self.losses.append(losses['total_loss'])
                 #wandb.log(losses)
             
             # Backward pass
@@ -208,6 +236,15 @@ class STCNModel:
                 losses['total_loss'].backward() 
                 self.optimizer.step()
             self.scheduler.step()
+
+            #breakpoint()
+            if data['label'].shape[0] <= 5:
+                indices = range(data['label'].shape[0])
+            else:
+                indices = random.sample(range(data['label'].shape[0]), 5)
+            for b in indices:
+                viz_image = get_viz(b, Ms, Qs, mask, data['input'])
+                wandb.log({f'Training Sample - Epoch {epoch}' : viz_image})
 
             return losses['loss'], acc
 
@@ -230,6 +267,22 @@ class STCNModel:
 
         os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
         checkpoint_path = self.save_path + '_checkpoint.pth'
+        checkpoint = { 
+            'it': it,
+            'network': self.STCN.state_dict(),
+            'optimizer': self.optimizer.state_dict(),
+            'scheduler': self.scheduler.state_dict()}
+        torch.save(checkpoint, checkpoint_path)
+
+        print('Checkpoint saved to %s.' % checkpoint_path)
+
+    def save_best_checkpoint(self, it):
+        if self.save_path is None:
+            print('Saving has been disabled.')
+            return
+
+        os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
+        checkpoint_path = self.save_path + '_best_checkpoint.pth'
         checkpoint = { 
             'it': it,
             'network': self.STCN.state_dict(),

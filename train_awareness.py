@@ -41,36 +41,34 @@ def main(args):
     """
     model = STCNModel(args).train()
     # For loading a checkpoint to continue training
-    it = model.load_model("model_saves/_checkpoint_epoch20_run12_20_postrestart.pth")
+    #it = model.load_model("model_saves/_checkpoint_epoch3_run1_12.pth")
 
     total_iter = 0
 
     """
     Load dataset
     """
-    # episode_list = sorted(os.listdir(args.raw_data), reverse=False)
+    episode_list = sorted(os.listdir(args.raw_data), reverse=False)
 
-    # #val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
-    # #train_episodes = list(set(episode_list) - set(val_episodes))
+    val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
+    train_episodes = list(set(episode_list) - set(val_episodes))
     # val_episodes = ["cbdr8-54"]
     # train_episodes = ["cbdr9-23", "cbdr6-41", "wom1-21"]
     train_batch_size = args.batch_size
 
-    # data = []
-    # for ep in train_episodes:
-    #         dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
-    #         data.append(dataset)
-    #         #concat_val_sample_weights += dataset.get_sample_weights()
-    # train_dataset = torch.utils.data.ConcatDataset(data)
-    # # train_sampler = torch.utils.data.distributed.DistributedSampler(small_dataset, shuffle=True)
-    # train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
+    data = []
+    for ep in train_episodes:
+            dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
+            data.append(dataset)
+    train_dataset = torch.utils.data.ConcatDataset(data)
+    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
 
-    # val_data = []
-    # for ep in val_episodes:
-    #     val_dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
-    #     val_data.append(val_dataset)
-    # val_dataset = torch.utils.data.ConcatDataset(val_data)
-    # val_loader = DataLoader(val_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
+    val_data = []
+    for ep in val_episodes:
+        val_dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
+        val_data.append(val_dataset)
+    val_dataset = torch.utils.data.ConcatDataset(val_data)
+    val_loader = DataLoader(val_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
     
 
     """
@@ -79,13 +77,14 @@ def main(args):
     # print('Training loader size:', len(train_loader))
     total_epoch = args.num_epochs
     current_epoch = 0
+    #current_epoch = 4
     #current_epoch = 12
     print('Number of training epochs (the last epoch might not complete): ', total_epoch)
 
     """
     wandb setup
     """
-    wandb.init(entity='harplab-SA', project='dreyevr_stcn', name="initial_trained_model_testset_run_fixed", config=vars(args))
+    wandb.init(entity='harplab-SA', project='dreyevr_stcn', name="full_training_with_ignore_mask_redo", config=vars(args))
     #wandb.watch(model, log='all')
 
     """
@@ -94,118 +93,120 @@ def main(args):
     # Need this to select random bases in different workers
     # np.random.seed(np.random.randint(2**30-1) + local_rank*100)
     # model.save_checkpoint(total_iter)
-    # for e in range(current_epoch, total_epoch): 
-    #     print('Epoch %d/%d' % (e, total_epoch))
+    best_val_acc = 0
+    for e in range(current_epoch, total_epoch): 
+        print('Epoch %d/%d' % (e, total_epoch))
 
-    #     total_train_loss = 0
-    #     total_train_acc = 0
+        total_train_loss = 0
+        total_train_acc = 0
 
-    #     # Train loop
-    #     model.train()
-    #     for data in tqdm(train_loader, desc=f"Epoch {e}", leave=False):
-    #         with autocast():
-    #             curr_loss, curr_acc = model.do_pass(data, e, total_iter)
-    #         torch.cuda.empty_cache()
-    #         total_train_loss += curr_loss
-    #         total_train_acc += curr_acc
-    #         total_iter += 1
-    #     train_loss = total_train_loss / len(train_loader)
-    #     train_acc = total_train_acc / len(train_loader)
-    #     wandb.log({'train_loss': train_loss, 'train_object_level_accuracy': train_acc})
+        # Train loop
+        model.train()
+        for data in tqdm(train_loader, desc=f"Epoch {e}", leave=False):
+            with autocast():
+                curr_loss, curr_acc = model.do_pass(data, e, total_iter)
+            torch.cuda.empty_cache()
+            total_train_loss += curr_loss
+            total_train_acc += curr_acc
+            total_iter += 1
+        train_loss = total_train_loss / len(train_loader)
+        train_acc = total_train_acc / len(train_loader)
+        wandb.log({'train_loss': train_loss, 'train_object_level_accuracy': train_acc})
         
-    #     # validation every 2 epochs
-    #     if e % 2 == 0:
-    #         model.val()
-    #         print("Validation")
-    #         total_val_loss = 0
-    #         total_val_acc = 0
-    #         with torch.no_grad():
-    #             for data_val in val_loader:
-    #                 with autocast():
-    #                     curr_loss, curr_acc, curr_preds, curr_gts, curr_raw_preds = model.val_pass(data_val, e, total_iter)
-    #                 torch.cuda.empty_cache()
-    #                 total_val_loss += curr_loss
-    #                 total_val_acc += curr_acc
+        # validation every 2 epochs
+        if e % 2 == 0:
+            model.val()
+            print("Validation")
+            total_val_loss = 0
+            total_val_acc = 0
+            with torch.no_grad():
+                for data_val in val_loader:
+                    with autocast():
+                        curr_loss, curr_acc, curr_preds, curr_gts, curr_raw_preds = model.val_pass(data_val, e, total_iter)
+                    torch.cuda.empty_cache()
+                    total_val_loss += curr_loss
+                    total_val_acc += curr_acc
             
-    #         val_loss = total_val_loss / len(val_loader)
-    #         val_acc = total_val_acc / len(val_loader)
-    #         wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
-            
-    #     # Save model checkpoint at the end of each epoch
-    #     model.save_checkpoint(total_iter)
+            val_loss = total_val_loss / len(val_loader)
+            val_acc = total_val_acc / len(val_loader)
+            wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
 
-    #     memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)  # Convert to MB
-    #     memory_reserved = torch.cuda.memory_reserved() / (1024 ** 2)    # Convert to MB
-    #     wandb.log({'memory_allocated_MB': memory_allocated, 'memory_reserved_MB': memory_reserved})
+            # saving the best epoch
+            if val_acc > best_val_acc:
+                best_val_acc = val_acc
+                model.save_best_checkpoint(total_iter)
+            
+        # Save model checkpoint at the end of each epoch
+        model.save_checkpoint(total_iter)
+
+        memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)  # Convert to MB
+        memory_reserved = torch.cuda.memory_reserved() / (1024 ** 2)    # Convert to MB
+        wandb.log({'memory_allocated_MB': memory_allocated, 'memory_reserved_MB': memory_reserved})
         
         
-    # # Save checkpoint at the end            
-    # if not args.debug:
-    #     model.save_checkpoint(total_iter)
+    # Save checkpoint at the end            
+    if not args.debug:
+        model.save_checkpoint(total_iter)
 
     
-    # # Vizualize the results and log to wandb
-    # with torch.no_grad():
-    #     for train_data in train_loader:
-    #         model.viz_pass(train_data, "train", total_iter)
-    #     for val_data in val_loader:
-    #         model.viz_pass(val_data, "val", total_iter)
+    # Vizualize the results and log to wandb
+    with torch.no_grad():
+        for train_data in train_loader:
+            model.viz_pass(train_data, "train", total_iter)
+        for val_data in val_loader:
+            model.viz_pass(val_data, "val", total_iter)
 
     
     # Test Epoch
-    test_dir = "/home/harpadmin/raw_data_test"
-    test_episodes = sorted(os.listdir(test_dir), reverse=False)
-    #test_episodes = ["cbdr4-35", "cbdr7-41"]
-    test_data = []
-    for ep in test_episodes:
-        test_dataset = SituationalAwarenessDataset(test_dir, args.sensor_config_file, ep, args)
-        test_data.append(test_dataset)
-    test_dataset = torch.utils.data.ConcatDataset(test_data)
-    test_loader = DataLoader(test_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
+    # test_dir = "/home/harpadmin/raw_data_test"
+    # test_episodes = sorted(os.listdir(test_dir), reverse=False)
+    # #test_episodes = ["cbdr4-35", "cbdr7-41"]
+    # test_data = []
+    # for ep in test_episodes:
+    #     test_dataset = SituationalAwarenessDataset(test_dir, args.sensor_config_file, ep, args)
+    #     test_data.append(test_dataset)
+    # test_dataset = torch.utils.data.ConcatDataset(test_data)
+    # test_loader = DataLoader(test_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
 
-    #Get test metrics
-    model.val()
-    print("Testing")
-    total_test_loss = 0
-    total_test_acc = 0
-    # total_test_prec = 0
-    # total_test_rec = 0
-    preds_list = []
-    gts_list = []
-    raw_preds_list = []
-    with torch.no_grad():
-        for data_test in tqdm(test_loader, desc="Testing Eval", leave=False):
-            with autocast():
-                curr_loss, curr_acc, curr_preds, curr_gts, curr_raw_preds = model.val_pass(data_test, total_epoch, it)
-            preds_list += curr_preds
-            gts_list += curr_gts
-            raw_preds_list += curr_raw_preds
-            torch.cuda.empty_cache()
-            total_test_loss += curr_loss
-            total_test_acc += curr_acc
-            # total_test_prec += curr_precision
-            # total_test_rec += curr_recall
-            #model.viz_pass(data_test, "test", it)
+    # #Get test metrics
+    # model.val()
+    # print("Testing")
+    # total_test_loss = 0
+    # total_test_acc = 0
+    # # total_test_prec = 0
+    # # total_test_rec = 0
+    # preds_list = []
+    # gts_list = []
+    # raw_preds_list = []
+    # with torch.no_grad():
+    #     for data_test in tqdm(test_loader, desc="Testing Eval", leave=False):
+    #         with autocast():
+    #             curr_loss, curr_acc, curr_preds, curr_gts, curr_raw_preds = model.val_pass(data_test, total_epoch, it)
+    #         preds_list += curr_preds
+    #         gts_list += curr_gts
+    #         raw_preds_list += curr_raw_preds
+    #         torch.cuda.empty_cache()
+    #         total_test_loss += curr_loss
+    #         total_test_acc += curr_acc
+    #         # total_test_prec += curr_precision
+    #         # total_test_rec += curr_recall
+    #         #model.viz_pass(data_test, "test", it)
 
-    # Save preds_list and gts_list
-    np.save('model_saves/test_preds.npy', preds_list)
-    np.save('model_saves/test_gts.npy', gts_list)
-    np.save('model_saves/test_raw_preds.npy', raw_preds_list)
+    # # Save preds_list and gts_list
+    # np.save('model_saves/test_preds.npy', preds_list)
+    # np.save('model_saves/test_gts.npy', gts_list)
+    # np.save('model_saves/test_raw_preds.npy', raw_preds_list)
 
 
-    test_loss = total_test_loss / len(test_loader)
-    print(test_loss)
-    test_acc = total_test_acc / len(test_loader)
-    print(test_acc)
-    test_prec = precision_score(gts_list, preds_list)
-    print(test_prec)
-    test_rec = recall_score(gts_list, preds_list)
-    print(test_rec)
-    # test_prec = total_test_prec / len(test_loader)
+    # test_loss = total_test_loss / len(test_loader)
+    # print(test_loss)
+    # test_acc = total_test_acc / len(test_loader)
+    # print(test_acc)
+    # test_prec = precision_score(gts_list, preds_list)
     # print(test_prec)
-    # test_rec = total_test_rec / len(test_loader)
+    # test_rec = recall_score(gts_list, preds_list)
     # print(test_rec)
-    wandb.log({'test_avg_loss': test_loss, 'test_avg_object_level_accuracy': test_acc, 'test_precision': test_prec, 'test_recall': test_rec})
+    # wandb.log({'test_avg_loss': test_loss, 'test_avg_object_level_accuracy': test_acc, 'test_precision': test_prec, 'test_recall': test_rec})
 
 
         
