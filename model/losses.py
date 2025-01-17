@@ -31,7 +31,7 @@ class BootstrappedCE(nn.Module):
         self.end_warm = end_warm
         self.top_p = top_p
 
-    def forward(self, input, target, it):
+    def forward(self, input, target, ignore_mask, it):
         # convert input from (N, C, H, W) to (N, C, H*W)
         input = input.flatten(2)
         # target has shape (N, C, H, W) -- convert to (N, H*W, C)
@@ -40,10 +40,15 @@ class BootstrappedCE(nn.Module):
         # exclude class dimension
         target = target.squeeze(-1)
 
+        ignore_mask = ignore_mask.flatten()
         if it < self.start_warm:
-            return F.cross_entropy(input, target, weight=torch.tensor([1, 1, 10**(-2)]).to("cuda:0")), 1.0
+            raw_loss = F.cross_entropy(input, target, weight=torch.tensor([1, 1, 10**(-2)]).to("cuda:0"), reduction='none').view(-1)
+            raw_loss = raw_loss * ignore_mask
+            return raw_loss.mean(), 1.0
 
-        raw_loss = F.cross_entropy(input, target, reduction='none').view(-1)
+        raw_loss = F.cross_entropy(input, target, weight=torch.tensor([1, 1, 10**(-2)]).to("cuda:0"), reduction='none').view(-1)
+        raw_loss = raw_loss * ignore_mask
+
         num_pixels = raw_loss.numel()
 
         if it > self.end_warm:
@@ -73,7 +78,10 @@ class LossComputer:
             # print(data['logits'].shape)
             # print(data['label'].shape)
             # print(data['mask'].shape)
-            loss, p =  self.bce(data['logits'][j:j+1], data['label'][j:j+1], it)
+            pred = data['logits'][j:j+1]
+            gt = data['label'][j:j+1]
+            ignore_mask = data['ignore_mask'][j:j+1]
+            loss, p =  self.bce(pred, gt, ignore_mask, it)
             # if selector is not None and selector[j][1] > 0.5:
             #     loss, p = self.bce(data['logits_%d'%i][j:j+1], data['cls_gt'][j:j+1,i], it)
             # else:
