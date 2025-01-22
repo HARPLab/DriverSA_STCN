@@ -133,12 +133,16 @@ class STCNModel:
 
 
             losses = self.loss_computer.compute({**data, **out}, it)
-            #val_losses = {'val_loss': losses['loss'], 'val_p': losses['p'], 'val_total_loss': losses['total_loss'], 'val_hide_iou/i': losses['hide_iou/i'], 'val_hide_iou/u': losses['hide_iou/u']}
+
+            for key, value in out.items():
+                out[key] = value.detach()
+            losses['total_loss'] = losses['total_loss'].detach()
+
             val_losses = losses['loss'].detach().cpu().item()
             # wandb.log(val_losses)
             return val_losses, acc, preds, gts, raw_preds
 
-    def val_pass(self, data, epoch, it=0):
+    def val_pass(self, data, epoch, log_viz, it=0):
         for k, v in data.items():
             if type(v) != list and type(v) != dict and type(v) != int:
                 data[k] = v.cuda(non_blocking=True)
@@ -165,28 +169,25 @@ class STCNModel:
             out['mask'] = mask
             
             #object level accuracy
-            acc, preds, gts, raw_preds, obj_ids = self.acc_metric.forward(mask.cpu(), Ms.cpu(), inst_metric)
-            # precision, preds, gts = self.prec_metric.forward(mask.cpu(), Ms.cpu(), inst_metric)
-            # recall, preds, gts = self.rec_metric.forward(mask.cpu(), Ms.cpu(), inst_metric)
-            #wandb.log({'val_object_level_accuracy': acc})
-
-                #wandb.log({'val_gt_image': wandb.Image(gt_image, caption='Val Ground Truth Label Mask'), 'val_mask_image': wandb.Image(mask_image, caption='Val Predicted Mask'), 'val_heatmap_image': wandb.Image(heatmap_image, caption='Val Gaze Heatmap')})
-            if data['label'].shape[0] <= 5:
-                indices = range(data['label'].shape[0])
-            else:
-                indices = random.sample(range(data['label'].shape[0]), 5)
-            for b in indices:
-                viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-                wandb.log({f'Validation Sample - Epoch {epoch}' : viz_image})
+            acc, _, _, _, _ = self.acc_metric.forward(mask.cpu(), Ms.cpu(), inst_metric)
+            
+            if log_viz and data['label'].shape[0] > 0:
+                indices = range(min(5, data['label'].shape[0]))
+                for b in indices:
+                    viz_image = get_viz(b, Ms, Qs, mask, data['input'])
+                    wandb.log({f'Validation Sample - Epoch {epoch}' : viz_image}, commit=False)
 
 
             losses = self.loss_computer.compute({**data, **out}, it)
-            #val_losses = {'val_loss': losses['loss'], 'val_p': losses['p'], 'val_total_loss': losses['total_loss'], 'val_hide_iou/i': losses['hide_iou/i'], 'val_hide_iou/u': losses['hide_iou/u']}
-            val_losses = losses['loss'].detach().cpu().item()
-            # wandb.log(val_losses)
-            return val_losses, acc, preds, gts, raw_preds
+
+            for key, value in out.items():
+                out[key] = value.detach()
+            losses['total_loss'] = losses['total_loss'].detach()
             
-    def do_pass(self, data, epoch, it=0):
+            val_losses = losses['loss'].detach().cpu().item()
+            return val_losses, acc
+            
+    def do_pass(self, data, epoch, log_viz, it=0):
         # No need to store the gradient outside training
         torch.set_grad_enabled(self._is_train)
 
@@ -237,16 +238,20 @@ class STCNModel:
                 self.optimizer.step()
             self.scheduler.step()
 
-            #breakpoint()
-            if data['label'].shape[0] <= 5:
-                indices = range(data['label'].shape[0])
-            else:
-                indices = random.sample(range(data['label'].shape[0]), 5)
-            for b in indices:
-                viz_image = get_viz(b, Ms, Qs, mask, data['input'])
-                wandb.log({f'Training Sample - Epoch {epoch}' : viz_image})
+            for key, value in out.items():
+                out[key] = value.detach()
+            losses['total_loss'] = losses['total_loss'].detach()
 
-            return losses['loss'], acc
+            #breakpoint()
+            if log_viz and data['label'].shape[0] > 0:
+                num_samples = min(5, data['label'].shape[0])
+                indices = random.sample(range(data['label'].shape[0]), num_samples)
+                for b in indices:
+                    viz_image = get_viz(b, Ms, Qs, mask, data['input'])
+                    wandb.log({f'Training Sample - Epoch {epoch}': viz_image}, commit=False)
+
+
+            return losses['loss'].detach().cpu().item(), acc
 
     def save(self, it):
         if self.save_path is None:
