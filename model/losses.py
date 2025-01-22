@@ -24,12 +24,14 @@ iou_hooks_mo = [
 
 # https://stackoverflow.com/questions/63735255/how-do-i-compute-bootstrapped-cross-entropy-loss-in-pytorch
 class BootstrappedCE(nn.Module):
-    def __init__(self, start_warm=20000, end_warm=70000, top_p=0.15):
+    def __init__(self, start_warm=20000, end_warm=70000, top_p=0.15, device='cuda:0'):
         super().__init__()
 
         self.start_warm = start_warm
         self.end_warm = end_warm
         self.top_p = top_p
+        self.weights = torch.tensor([1, 1, 10**-2], device=device)
+
 
     def forward(self, input, target, ignore_mask, it):
         # convert input from (N, C, H, W) to (N, C, H*W)
@@ -42,11 +44,11 @@ class BootstrappedCE(nn.Module):
 
         ignore_mask = ignore_mask.flatten()
         if it < self.start_warm:
-            raw_loss = F.cross_entropy(input, target, weight=torch.tensor([1, 1, 10**(-2)]).to("cuda:0"), reduction='none').view(-1)
+            raw_loss = F.cross_entropy(input, target, weight=self.weights, reduction='none').view(-1)
             raw_loss = raw_loss * ignore_mask
             return raw_loss.mean(), 1.0
 
-        raw_loss = F.cross_entropy(input, target, weight=torch.tensor([1, 1, 10**(-2)]).to("cuda:0"), reduction='none').view(-1)
+        raw_loss = F.cross_entropy(input, target, weight=self.weights, reduction='none').view(-1)
         raw_loss = raw_loss * ignore_mask
 
         num_pixels = raw_loss.numel()
@@ -74,31 +76,42 @@ class LossComputer:
         # for i in range(1, s):
         #     # Have to do it in a for-loop like this since not every entry has the second object
         #     # Well it's not a lot of iterations anyway
-        for j in range(b):
-            # print(data['logits'].shape)
-            # print(data['label'].shape)
-            # print(data['mask'].shape)
-            pred = data['logits'][j:j+1]
-            gt = data['label'][j:j+1]
-            ignore_mask = data['ignore_mask'][j:j+1]
-            loss, p =  self.bce(pred, gt, ignore_mask, it)
-            # if selector is not None and selector[j][1] > 0.5:
-            #     loss, p = self.bce(data['logits_%d'%i][j:j+1], data['cls_gt'][j:j+1,i], it)
-            # else:
-            #     loss, p = self.bce(data['logits_%d'%i][j:j+1,:2], data['cls_gt'][j:j+1,i], it)
+        # for j in range(b):
+        #     pred = data['logits'][j:j+1]
+        #     gt = data['label'][j:j+1]
+        #     ignore_mask = data['ignore_mask'][j:j+1]
+        #     loss, p =  self.bce(pred, gt, ignore_mask, it)
+        #     # if selector is not None and selector[j][1] > 0.5:
+        #     #     loss, p = self.bce(data['logits_%d'%i][j:j+1], data['cls_gt'][j:j+1,i], it)
+        #     # else:
+        #     #     loss, p = self.bce(data['logits_%d'%i][j:j+1,:2], data['cls_gt'][j:j+1,i], it)
 
-            losses['loss'] += loss / b
-            losses['p'] += p / b
+        #     losses['loss'] += loss / b
+        #     losses['p'] += p / b
 
-            losses['total_loss'] += losses['loss']
+        #     losses['total_loss'] += losses['loss']
 
-            new_total_i, new_total_u = compute_tensor_iu(data['mask']>0.5, data['label']>0.5)
-            losses['hide_iou/i'] += new_total_i
-            losses['hide_iou/u'] += new_total_u
+        #     # new_total_i, new_total_u = compute_tensor_iu(data['mask']>0.5, data['label']>0.5)
+        #     # losses['hide_iou/i'] += new_total_i
+        #     # losses['hide_iou/u'] += new_total_u
 
-            # if selector is not None:
-            #     new_total_i, new_total_u = compute_tensor_iu(data['sec_mask_%d'%i]>0.5, data['sec_gt'][:,i]>0.5)
-            #     losses['hide_iou/sec_i'] += new_total_i
-            #     losses['hide_iou/sec_u'] += new_total_u
+        #     # if selector is not None:
+        #     #     new_total_i, new_total_u = compute_tensor_iu(data['sec_mask_%d'%i]>0.5, data['sec_gt'][:,i]>0.5)
+        #     #     losses['hide_iou/sec_i'] += new_total_i
+        #     #     losses['hide_iou/sec_u'] += new_total_u
+
+        # return losses
+
+        preds = data['logits']
+        gts = data['label'] 
+        ignore_masks = data['ignore_mask']
+
+        # Compute loss for the entire batch at once
+        batch_loss, batch_p = self.bce(preds, gts, ignore_masks, it)  # Vectorized call
+
+        # Average loss across the batch
+        losses['loss'] = batch_loss
+        losses['p'] = batch_p
+        losses['total_loss'] += losses['loss']
 
         return losses
