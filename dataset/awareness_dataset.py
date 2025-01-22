@@ -635,11 +635,72 @@ class SituationalAwarenessDataset(Dataset):
             
         gaze_heatmap = self.get_gaze_map_tensor(np.array(instance_seg_image), raw_gaze_mid, sigma=self.gaussian_sigma, gaze_fade=self.args.gaze_fade)
         
+        ###############################################
+        #TODO: get gaze_heatmaps for past 10 frames
+        # get gaze_heatmaps with single gaze point can use above loop to construct this
+        # key will be stack of instance_segmentation_output images (also from above loop)
+        # gaze_heatmap_query_stack and instance_seg_key_stack will need to be added to the data dict
+
+        gaze_heatmaps = []
+        instance_segmentation_images = []
+        if self.use_rgb:
+            rgb_images = []
+        raw_gaze_mid = np.zeros((1, 2), dtype=np.int32)-1
+        # Note: to keep frame rate consistent, we will stack 3 seconds of frames giving 12 frames (can be changed but that would increase input size)
+        num_frames = 0
+        total_stacked_frames = self.sample_rate*3
+
+        while frame - self.rgb_frame_delay > 0 and num_frames != total_stacked_frames:
+
+            target_time = self.awareness_df["TimeElapsed"][frame - self.rgb_frame_delay] - frame_time*num_frames
+            closest_frame_indices_ranking = np.argsort(abs(np.array(history_frame_times)-target_time))
+            closest_frame_ranking = [history_frames[i] for i in closest_frame_indices_ranking]
+            
+            closest_frame = 0
+            for f in range(len(closest_frame_ranking)):
+                if os.path.exists(self.images_dir / 'instance_segmentation_output' / \
+                                  ('%.6d.png' % (closest_frame_ranking[f] + self.rgb_frame_delay))):
+                    closest_frame = closest_frame_ranking[f]
+                    break
+                        
+            curr_frame = closest_frame
+            curr_instance_seg_frame = Image.open(self.images_dir / 'instance_segmentation_output' / ('%.6d.png' % (curr_frame + self.rgb_frame_delay))).convert('RGB') 
+            # ^ check that don't need rgb_frame_delay
+            instance_segmentation_images.append(curr_instance_seg_frame)
+
+            if self.use_rgb:
+                curr_rgb_frame = Image.open(self.images_dir / 'rgb_output' / ('%.6d.png' % (curr_frame + self.rgb_frame_delay))).convert('RGB')
+                rgb_images.append(curr_rgb_frame)
+
+            focus_hit_pt_i = np.asarray(self.awareness_df["FocusInfo_HitPoint"][curr_frame])
+            pts_mid, _, _ = self.get_gaze_point(focus_hit_pt_i, loc, rot)
+
+            if pts_mid[0] >= 0 and pts_mid[0] < curr_instance_seg_frame.width and \
+                pts_mid[1] >= 0 and pts_mid[1] < curr_instance_seg_frame.height:
+                raw_gaze_mid[0,:] = pts_mid
+
+
+            curr_gaze_heatmap = self.get_gaze_map_tensor(np.array(curr_instance_seg_frame), raw_gaze_mid, sigma=self.gaussian_sigma, gaze_fade=self.args.gaze_fade)
+            gaze_heatmaps.append(curr_gaze_heatmap)
+
+            num_frames += 1
+        
+        gaze_heatmap_query_stack = torch.stack(gaze_heatmaps)
+
+        ###############################################
         
         # Convert all images to tensors
         if self.use_rgb:
             rgb_image = transforms.functional.to_tensor(rgb_image) # only use this function to convert PIL images to tensors, normalizes between 0 and 1
         
+        ###############################################
+        #TODO: create rgb stack as well
+        if self.use_rgb:
+            rgb_images = [transforms.functional.to_tensor(img) for img in rgb_images]
+            rgb_stack = torch.stack(rgb_images)
+        
+        ###############################################
+
         inst_img_metric_transform = transforms.Compose([transforms.PILToTensor()])
         instance_seg_image_metrics = inst_img_metric_transform(instance_seg_image).float()
         
@@ -649,6 +710,18 @@ class SituationalAwarenessDataset(Dataset):
             instance_seg_image = transforms.functional.to_tensor(instance_seg_image)
         if self.instseg_channels > 1:
             instance_seg_image = transforms.functional.to_tensor(instance_seg_image)[:self.instseg_channels, :, :]
+
+        ###############################################
+        #TODO: create instance segmentation stack as well
+        if self.instseg_channels == 1:
+            instance_segmentation_images = [extract_relevant_objects(img, self.args) for img in instance_segmentation_images]
+            instance_segmentation_images = [transforms.functional.to_tensor(img) for img in instance_segmentation_images]
+        if self.instseg_channels > 1:
+            instance_segmentation_images = [transforms.functional.to_tensor(img)[:self.instseg_channels, :, :] for img in instance_segmentation_images]
+        
+        instance_seg_key_stack = torch.stack(instance_segmentation_images)
+
+        ###############################################
         
         label_mask_image = transforms.functional.to_tensor(full_label_mask)
         #print(label_mask_image.shape)
@@ -658,6 +731,16 @@ class SituationalAwarenessDataset(Dataset):
             input_images = (rgb_image, instance_seg_image, gaze_heatmap)
         else:
             input_images = (instance_seg_image, gaze_heatmap)
+
+        ###############################################
+        #TODO: input images for the stacks
+        if self.use_rgb:
+            input_images = (rgb_stack, instance_seg_key_stack, gaze_heatmap_query_stack)
+        else:
+            input_images = (instance_seg_key_stack, gaze_heatmap_query_stack)
+        
+        ###############################################
+
         final_input_image = torch.cat(input_images)
  
         final_label_mask_image = label_mask_image
@@ -695,9 +778,11 @@ class SituationalAwarenessDataset(Dataset):
             'input': final_input_image,
             'label': final_label_mask_image,
             'ignore_mask': final_ignore_mask.permute(2, 0, 1),
-            'gaze_heatmap': gaze_heatmap,
-            'instance_seg': instance_seg_image,
-            'inst_metrics': final_inst_images_for_metrics
+            # 'gaze_heatmap': gaze_heatmap,
+            # 'instance_seg': instance_seg_image,
+            'inst_metrics': final_inst_images_for_metrics,
+            'gaze_heatmap_query_stack': gaze_heatmap_query_stack,
+            'instance_seg_key_stack': instance_seg_key_stack
         }
 
         return data

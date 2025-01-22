@@ -148,20 +148,24 @@ class STCNModel:
                 data[k] = v.cuda(non_blocking=True)
 
         out = {}
-        Fs = data['instance_seg'] #used for Key and Value [16, 1, 608, 800]
-        Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
+        # Fs = data['instance_seg'] #used for Key and Value [16, 1, 600, 800]
+        # Qs = data['gaze_heatmap'] #used for Query [16, 1, 600, 800]
+        
+        Fs = data['instance_seg_key_stack'] #used for Key and value [bs (16), 12 (time), 1, 600, 800]
+        Qs = data['gaze_heatmap_query_stack'] #used for query [bs (16), 12 (time), 1, 600, 800]
+        
         Ms = data['label'] #Label mask [16, 1, 608, 800]
         inst_metric = data['inst_metrics']
 
         with torch.cuda.amp.autocast(enabled=self.para.amp):
             # key features never change, compute once
-            k16, kf16= self.STCN('encode_key', Fs)  # [16, 64, 38, 50], [16, 256, 38, 50]
+            k16, kf16= self.STCN('encode_key', Fs)  #[16, 12, 64, 38, 50], [16, 12, 256, 38, 50]
 
             v16, vf16 = self.STCN('encode_value', Fs)
 
             q16, qf16= self.STCN('encode_query', Qs)
 
-
+            print("Done with encoding")
             logits, mask = self.STCN('segment', k16, v16, q16, qf16)
             mask = mask.detach()
 
@@ -196,15 +200,19 @@ class STCNModel:
                 data[k] = v.cuda(non_blocking=True)
 
         out = {}
-        Fs = data['instance_seg'] #used for Key and Value [16, 1, 600, 800]
-        Qs = data['gaze_heatmap'] #used for Query [16, 1, 600, 800]
+        # Fs = data['instance_seg'] #used for Key and Value [16, 1, 600, 800]
+        # Qs = data['gaze_heatmap'] #used for Query [16, 1, 600, 800]
+        
+        Fs = data['instance_seg_key_stack'] #used for Key and value [bs (16), 12 (time), 1, 600, 800]
+        Qs = data['gaze_heatmap_query_stack'] #used for query [bs (16), 12 (time), 1, 600, 800]
+
         Ms = data['label'] #Label mask [16, 1, 600, 800]
         inst_metric = data['inst_metrics']
         ignore_mask = data['ignore_mask']
 
         with torch.cuda.amp.autocast(enabled=self.para.amp):
             # key features never change, compute once
-            k16, kf16= self.STCN('encode_key', Fs)  # [16, 64, 38, 50], [16, 256, 38, 50]
+            k16, kf16= self.STCN('encode_key', Fs)  # [16, 12, 64, 38, 50], [16, 12, 256, 38, 50]
 
             v16, vf16 = self.STCN('encode_value', Fs)
 

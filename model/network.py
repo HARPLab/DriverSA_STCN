@@ -77,14 +77,39 @@ class SelfAttention(nn.Module):
         self.input_dim = input_dim
    
     def forward(self, k, q, v):
-        k = k.transpose(-2, -1)
-        similarity = k @ q
+        batch_size, time_steps, channels, height, width = k.shape
+
+        # Spatial Attention
+        k_flat = k.view(batch_size*time_steps, channels, height*width).transpose(-2, -1)
+        q_flat = q.view(batch_size*time_steps, channels, height*width)
+
+        similarity = k_flat @ q_flat
         scaled = similarity / math.sqrt(self.input_dim)
         attention = F.softmax(scaled, dim=-1)
-        v = v.transpose(-2, -1)
-        out = attention @ v
-        
-        out = out.transpose(-2, -1)
+        v_flat = v.view(batch_size*time_steps, channels, height*width).transpose(-2, -1)
+        spatial_out = attention @ v_flat 
+
+        #Temporal Attention
+        spatial_out = spatial_out.view(batch_size, time_steps, channels, height, width)
+        k_flat_temp = spatial_out.transpose(1, 2).reshape(batch_size, channels, time_steps, -1).transpose(-2, -1)
+        q_flat_temp = q.transpose(1, 2).reshape(batch_size, channels, time_steps, -1)
+
+        similarity_temp = k_flat_temp @ q_flat_temp
+        scaled_temp = similarity_temp / math.sqrt(self.input_dim)
+        attention_temp = F.softmax(scaled_temp, dim=-1)
+        v_flat_temp = spatial_out.transpose(1, 2).reshape(batch_size, channels, time_steps, -1).transpose(-2, -1)
+        temp_out = attention_temp @ v_flat_temp
+
+        out = temp_out.transpose(-2, -1).view(batch_size, channels, time_steps, height, width)
+
+        out = out.mean(dim=2)
+        # k = k.transpose(-2, -1)
+        # similarity = k @ q
+        # scaled = similarity / math.sqrt(self.input_dim)
+        # attention = F.softmax(scaled, dim=-1)
+        # v = v.transpose(-2, -1)
+        # out = attention @ v
+        # out = out.transpose(-2, -1)
         return out
 
 
@@ -118,70 +143,122 @@ class STCN(nn.Module):
 
     def encode_key(self, frame): 
         #Vos dataset frame shape: [b, 3, 3, 384, 384]
-        #awareness dataset frame shape: [b, 1, 608, 800]
-        # input: b*c*h*w
-        b = frame.shape[:1]
+        #awareness dataset frame shape: [b, 12, 1, 600, 800]
+        # input: b*t*c*h*w
+        batch_size, time_steps, channels, height, width = frame.shape
 
-        f16 = self.key_encoder(frame)
-        k16 = self.key_proj(f16)
-        f16_thin = self.key_comp(f16)
+        #NOTE: batch size of 24 is too big -- 16 might work
+        
+        encoding_outputs = []
+        projection_outputs = []
+        for i in range(time_steps):
+            f16 = self.key_encoder(frame[:,i, :, :, :]) # [b, 256, 38, 50]
+            k16 = self.key_proj(f16) 
+            k16 = k16.contiguous() #[b, 64, 38, 50]
+            encoding_outputs.append(f16)
+            projection_outputs.append(k16)
 
-        # B*C*H*W
-        #k16 = k16.view(b, *k16.shape[-3:]).contiguous()
-        k16 = k16.contiguous()
 
-        # B*CHW
-        #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
-        #f16 = f16.view(b, *f16.shape[-3:])
-        f16 = f16
-        #f8 = f8.view(b, *f8.shape[-3:])
-        #f4 = f4.view(b, *f4.shape[-3:])
+        k16_tensor = torch.stack(projection_outputs, dim=1) #[16, 12, 64, 38, 50]
+        f16_tensor = torch.stack(encoding_outputs, dim=1)
 
-        return k16, f16
+
+        # f16 = self.key_encoder(frame)
+        # print("f16 shape: ", f16.shape)
+        # k16 = self.key_proj(f16)
+        # print("k16 shape: ", k16.shape)
+        # f16_thin = self.key_comp(f16)
+
+        # # B*C*H*W
+        # #k16 = k16.view(b, *k16.shape[-3:]).contiguous()
+        # k16_tensor = k16.contiguous()
+        # #print("k16 shape after view: ", k16.shape)
+
+        # # B*CHW
+        # #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        # #f16 = f16.view(b, *f16.shape[-3:])
+        # f16_tensor = f16
+        # #f8 = f8.view(b, *f8.shape[-3:])
+        # #f4 = f4.view(b, *f4.shape[-3:])
+
+        return k16_tensor, f16_tensor
 
     def encode_value(self, frame): 
-        b = frame.shape[:1]
+        batch_size, time_steps, channels, height, width = frame.shape
 
-        f16 = self.value_encoder(frame)
+        #NOTE: batch size of 24 is too big -- 16 might work
+        
+        encoding_outputs = []
+        projection_outputs = []
+        for i in range(time_steps):
+            f16 = self.value_encoder(frame[:,i, :, :, :]) # [b, 256, 38, 50]
+            v16 = self.key_proj(f16) 
+            v16 = v16.contiguous() #[b, 64, 38, 50]
+            encoding_outputs.append(f16)
+            projection_outputs.append(v16)
+        
 
-        v16 = self.key_proj(f16)
-        f16_thin = self.key_comp(f16)
+        v16_tensor = torch.stack(projection_outputs, dim=1)
+        f16_tensor = torch.stack(encoding_outputs, dim=1)
+        # b = frame.shape[:1]
 
-        # B*C*T*H*W
-        #v16 = v16.view(b, *v16.shape[-3:]).contiguous()
-        v16 = v16.contiguous()
+        # f16 = self.value_encoder(frame)
 
-        # B*T*C*H*W
-        #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
-        #f16 = f16.view(b, *f16.shape[-3:])
-        f16 = f16
-        # f8 = f8.view(b, *f8.shape[-3:])
-        # f4 = f4.view(b, *f4.shape[-3:])
+        # v16 = self.key_proj(f16)
+        # f16_thin = self.key_comp(f16)
 
-        return v16, f16
+        # # B*C*T*H*W
+        # #v16 = v16.view(b, *v16.shape[-3:]).contiguous()
+        # v16 = v16.contiguous()
+
+        # # B*T*C*H*W
+        # #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        # #f16 = f16.view(b, *f16.shape[-3:])
+        # f16 = f16
+        # # f8 = f8.view(b, *f8.shape[-3:])
+        # # f4 = f4.view(b, *f4.shape[-3:])
+
+        return v16_tensor, f16_tensor
 
     def encode_query(self, gaze_heatmap):
         # gaze heatmap image encoding
 
+        batch_size, time_steps, channels, height, width = gaze_heatmap.shape
+
+        #NOTE: batch size of 24 is too big -- 16 might work
+        
+        encoding_outputs = []
+        projection_outputs = []
+        for i in range(time_steps):
+            f16 = self.query_encoder(gaze_heatmap[:,i, :, :, :]) # [b, 256, 38, 50]
+            q16 = self.key_proj(f16) 
+            q16 = q16.contiguous() #[b, 64, 38, 50]
+            encoding_outputs.append(f16)
+            projection_outputs.append(q16)
+        
+
+        q16_tensor = torch.stack(projection_outputs, dim=1)
+        f16_tensor = torch.stack(encoding_outputs, dim=1)
+
         # input: b*t*c*h*w
-        b = gaze_heatmap.shape[:1]
+        # b = gaze_heatmap.shape[:1]
 
-        f16 = self.query_encoder(gaze_heatmap)
-        q16 = self.key_proj(f16)
-        f16_thin = self.key_comp(f16)
+        # f16 = self.query_encoder(gaze_heatmap)
+        # q16 = self.key_proj(f16)
+        # f16_thin = self.key_comp(f16)
 
-        # B*C*T*H*W
-        #q16 = q16.view(b, *q16.shape[-3:]).contiguous()
-        q16 = q16.contiguous()
+        # # B*C*T*H*W
+        # #q16 = q16.view(b, *q16.shape[-3:]).contiguous()
+        # q16 = q16.contiguous()
 
-        # B*T*C*H*W
-        #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
-        #f16 = f16.view(b, *f16.shape[-3:])
-        f16 = f16
-        # f8 = f8.view(b, *f8.shape[-3:])
-        # f4 = f4.view(b, *f4.shape[-3:])
+        # # B*T*C*H*W
+        # #f16_thin = f16_thin.view(b, *f16_thin.shape[-3:])
+        # #f16 = f16.view(b, *f16.shape[-3:])
+        # f16 = f16
+        # # f8 = f8.view(b, *f8.shape[-3:])
+        # # f4 = f4.view(b, *f4.shape[-3:])
 
-        return q16, f16
+        return q16_tensor, f16_tensor
 
     def self_attention_op(self, k16, q16, v16):
         # self attention between key instance segmentation and query gaze heatmap
@@ -194,7 +271,11 @@ class STCN(nn.Module):
 
 
     def segment(self, qk16, qv16, mk16, mv16, selector=None): 
-        # k16, v16, kf8, kf4, q16, qf16 ???
+        # input shapes
+        # qk16 [16, 12, 64, 38, 50]
+        # qv16 [16, 12, 64, 38, 50]
+        # mk16 [16, 12, 64, 38, 50]
+        
         #affinity = self.memory.get_affinity(mk16, qk16)
 
         #attention = self.self_attention(qk16, mk16, qv16)
