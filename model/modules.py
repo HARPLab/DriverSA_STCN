@@ -148,7 +148,6 @@ class ValueEncoder(nn.Module):
         return f16 #, f8, f4
     
 # Key Encoder takes in image segmentation
-# TODO: this is using resnet -- would need to retrain with binary images?
 class KeyEncoder(nn.Module):
     def __init__(self):
         super().__init__()
