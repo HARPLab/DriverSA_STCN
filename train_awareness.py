@@ -50,10 +50,10 @@ def main(args):
     """
     episode_list = sorted(os.listdir(args.raw_data), reverse=False)
 
-    val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
-    train_episodes = list(set(episode_list) - set(val_episodes))
-    # val_episodes = ["cbdr8-54"]
-    # train_episodes = ["cbdr9-23", "cbdr6-41", "wom1-21"]
+    #val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
+    #train_episodes = list(set(episode_list) - set(val_episodes))
+    val_episodes = ["cbdr8-54"]
+    train_episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
     train_batch_size = args.batch_size
 
     data = []
@@ -70,7 +70,6 @@ def main(args):
     val_dataset = torch.utils.data.ConcatDataset(val_data)
     val_loader = DataLoader(val_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
     
-
     """
     Determine current/max epoch
     """
@@ -84,7 +83,7 @@ def main(args):
     """
     wandb setup
     """
-    wandb.init(entity='harplab-SA', project='dreyevr_stcn', name="full_training_with_ignore_mask_redo", config=vars(args))
+    #wandb.init(entity='harplab-SA', project='dreyevr_stcn', name="full_training_with_ignore_mask_redo", config=vars(args))
     #wandb.watch(model, log='all')
 
     """
@@ -102,16 +101,20 @@ def main(args):
 
         # Train loop
         model.train()
+        batch_idx_train = 0
         for data in tqdm(train_loader, desc=f"Epoch {e}", leave=False):
             with autocast():
-                curr_loss, curr_acc = model.do_pass(data, e, total_iter)
+                log_viz = batch_idx_train < 3
+                curr_loss, curr_acc = model.do_pass(data, e, log_viz, total_iter)
+                #breakpoint()
+            batch_idx_train += 1
             torch.cuda.empty_cache()
             total_train_loss += curr_loss
             total_train_acc += curr_acc
             total_iter += 1
         train_loss = total_train_loss / len(train_loader)
         train_acc = total_train_acc / len(train_loader)
-        wandb.log({'train_loss': train_loss, 'train_object_level_accuracy': train_acc})
+        #wandb.log({'train_loss': train_loss, 'train_object_level_accuracy': train_acc})
         
         # validation every 2 epochs
         if e % 2 == 0:
@@ -120,16 +123,17 @@ def main(args):
             total_val_loss = 0
             total_val_acc = 0
             with torch.no_grad():
-                for data_val in val_loader:
+                for batch_idx, data_val in enumerate(val_loader):
                     with autocast():
-                        curr_loss, curr_acc, curr_preds, curr_gts, curr_raw_preds = model.val_pass(data_val, e, total_iter)
+                        log_viz_val = batch_idx < 3
+                        curr_loss, curr_acc = model.val_pass(data_val, e, log_viz_val, total_iter)
                     torch.cuda.empty_cache()
                     total_val_loss += curr_loss
                     total_val_acc += curr_acc
             
             val_loss = total_val_loss / len(val_loader)
             val_acc = total_val_acc / len(val_loader)
-            wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
+            #wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
 
             # saving the best epoch
             if val_acc > best_val_acc:
@@ -141,7 +145,7 @@ def main(args):
 
         memory_allocated = torch.cuda.memory_allocated() / (1024 ** 2)  # Convert to MB
         memory_reserved = torch.cuda.memory_reserved() / (1024 ** 2)    # Convert to MB
-        wandb.log({'memory_allocated_MB': memory_allocated, 'memory_reserved_MB': memory_reserved})
+        #wandb.log({'memory_allocated_MB': memory_allocated, 'memory_reserved_MB': memory_reserved})
         
         
     # Save checkpoint at the end            
