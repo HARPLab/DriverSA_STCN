@@ -30,7 +30,9 @@ def get_viz(b, Ms, Qs, mask, input_image):
     # gaze_heatmap = np.array(img_inputs[-1])[4:-4, :]*255
     
     # I think the heatmaps themselves are not being created properly???/
-
+    print("B value", b)
+    print("Input image", input_image)
+    print("Image input", input_image.shape)
     im2 = Image.fromarray(np.uint8(input_image[b].cpu().numpy()[1]*255))
     gaze_heatmap = np.array(im2)[4:-4, :]*255
 

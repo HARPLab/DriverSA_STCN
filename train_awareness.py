@@ -52,6 +52,7 @@ def main(args):
 
     #val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
     #train_episodes = list(set(episode_list) - set(val_episodes))
+    # Minisets
     val_episodes = ["cbdr8-54"]
     train_episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
     train_batch_size = args.batch_size
@@ -93,22 +94,28 @@ def main(args):
     # np.random.seed(np.random.randint(2**30-1) + local_rank*100)
     # model.save_checkpoint(total_iter)
     best_val_acc = 0
+    print("Before epoch")
     for e in range(current_epoch, total_epoch): 
         print('Epoch %d/%d' % (e, total_epoch))
-
+        print("After epoch")
         total_train_loss = 0
         total_train_acc = 0
-
+        print("Print before training")
         # Train loop
         model.train()
         batch_idx_train = 0
+        print("Print after training")
         for data in tqdm(train_loader, desc=f"Epoch {e}", leave=False):
+            print("Break 1")
+            print(data)
             with autocast():
                 log_viz = batch_idx_train < 3
                 curr_loss, curr_acc = model.do_pass(data, e, log_viz, total_iter)
                 #breakpoint()
+            print("Break 2")
             batch_idx_train += 1
             torch.cuda.empty_cache()
+            print("Break 3")
             total_train_loss += curr_loss
             total_train_acc += curr_acc
             total_iter += 1
@@ -229,7 +236,7 @@ if __name__ == "__main__":
 
     # data set config params
     args.add_argument("--sensor-config-file", type=str, default='sensor_config.ini')
-    args.add_argument("--raw-data", type=str, default='/home/harpadmin/raw_data_corrected')
+    args.add_argument("--raw-data", type=str, default='/media/storage/raw_data_corrected')
     args.add_argument("--use-rgb", action='store_true')
     args.add_argument("--instseg-channels", type=int, default=1)
     args.add_argument("--middle-andsides", action='store_true')
