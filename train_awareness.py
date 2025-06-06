@@ -106,16 +106,16 @@ def main(args):
         batch_idx_train = 0
         print("Print after training")
         for data in tqdm(train_loader, desc=f"Epoch {e}", leave=False):
-            print("Break 1")
-            print(data)
+            # print("Break 1")
+            # print(data)
             with autocast():
                 log_viz = batch_idx_train < 3
                 curr_loss, curr_acc = model.do_pass(data, e, log_viz, total_iter)
                 #breakpoint()
-            print("Break 2")
+            # print("Break 2")
             batch_idx_train += 1
             torch.cuda.empty_cache()
-            print("Break 3")
+            # print("Break 3")
             total_train_loss += curr_loss
             total_train_acc += curr_acc
             total_iter += 1

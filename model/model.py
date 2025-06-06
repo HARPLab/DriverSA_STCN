@@ -23,6 +23,10 @@ from model.visualization import get_viz
 
 import wandb
 
+wandb.init(
+    project="driver-awareness",  # Or your preferred project name
+    name=f"experiment_{time.strftime('%Y%m%d_%H%M%S')}" # Optional, gives a unique name
+)
 
 class STCNModel:
     def __init__(self, para, logger=None, save_path="model_saves/", local_rank=0, world_size=1):
