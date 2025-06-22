@@ -555,12 +555,15 @@ class SituationalAwarenessDataset(Dataset):
         # Return rgb_img, instance_segmentation_img, gaze_heatmap 
         # (read in raw gaze and construct heatmap in get_item itself), label mask image
         frame_num = self.index_mapping[idx]
-
+        target_size = (224, 224)  
+        
         # init data paths
         if self.use_rgb:        
             rgb_image = Image.open(self.images_dir / 'rgb_output' / ('%.6d.png' % frame_num)).convert('RGB')
-             
+            rgb_image = rgb_image.resize(target_size, resample=Image.BILINEAR)
+            
         instance_seg_image = Image.open(self.images_dir / 'instance_segmentation_output' / ('%.6d.png' % frame_num)).convert('RGB')
+        instance_seg_image = instance_seg_image.resize(target_size, resample=Image.NEAREST)        
 
         visible_total = self.corrected_labels_df['visible_total'][frame_num-self.rgb_frame_delay - 1] # -1 because corrected df is one frame shifted from awareness df
         awareness_label = self.corrected_labels_df['awareness_label'][frame_num-self.rgb_frame_delay - 1] # -1 because corrected df is one frame shifted from awareness df
@@ -665,6 +668,8 @@ class SituationalAwarenessDataset(Dataset):
                         
             curr_frame = closest_frame
             curr_instance_seg_frame = Image.open(self.images_dir / 'instance_segmentation_output' / ('%.6d.png' % (curr_frame + self.rgb_frame_delay))).convert('RGB') 
+            curr_instance_seg_frame = curr_instance_seg_frame.resize(target_size, resample=Image.NEAREST)        
+
             # ^ check that don't need rgb_frame_delay
             instance_segmentation_images.append(curr_instance_seg_frame)
 

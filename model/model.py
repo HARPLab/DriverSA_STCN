@@ -169,7 +169,7 @@ class STCNModel:
 
             q16, qf16= self.STCN('encode_query', Qs)
 
-            print("Done with encoding")
+            # print("Done with encoding")
             logits, mask = self.STCN('segment', k16, v16, q16, qf16)
             mask = mask.detach()
 

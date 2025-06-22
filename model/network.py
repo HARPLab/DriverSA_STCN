@@ -32,7 +32,7 @@ class Decoder(nn.Module):
 
         x = self.pred(F.relu(x))
         
-        x = F.interpolate(x, size=(600, 800), mode='bilinear', align_corners=False)
+        x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
         return x
 
 
