@@ -78,8 +78,10 @@ class STCNModel:
                 data[k] = v.cuda(non_blocking=True)
 
         out = {}
-        Fs = data['instance_seg'] #used for Key and Value [16, 1, 608, 800]
-        Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
+        Fs = data['instance_seg_key_stack']     
+        Qs = data['gaze_heatmap_query_stack'] 
+        # Fs = data.get('instance_seg', data['instance_seg_key_stack']) #used for Key and Value [16, 1, 608, 800]
+        # Qs = data['gaze_heatmap'] #used for Query [16, 1, 608, 800]
         Ms = data['label'] #Label mask [16, 1, 608, 800]
         inst_metric = data['inst_metrics']
 

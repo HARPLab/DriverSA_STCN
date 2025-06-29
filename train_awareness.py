@@ -162,11 +162,11 @@ def main(args):
     
     # Vizualize the results and log to wandb
     with torch.no_grad():
-        for train_data in train_loader:
-            model.viz_pass(train_data, "train", total_iter)
-        for val_data in val_loader:
-            model.viz_pass(val_data, "val", total_iter)
+        train_sample = next(iter(train_loader))
+        model.viz_pass(train_sample, "train", 0)
 
+        val_sample = next(iter(val_loader))
+        model.viz_pass(val_sample, "val", 0)
     
     # Test Epoch
     # test_dir = "/home/harpadmin/raw_data_test"

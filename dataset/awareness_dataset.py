@@ -789,7 +789,8 @@ class SituationalAwarenessDataset(Dataset):
             'gaze_heatmap_query_stack': gaze_heatmap_query_stack,
             'instance_seg_key_stack': instance_seg_key_stack
         }
-
+        # data['instance_seg'] = instance_seg_key_stack[0]
+        # data['instance_seg'] = instance_seg_key_stack[0]
         return data
 
 
