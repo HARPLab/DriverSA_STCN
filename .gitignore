@@ -131,4 +131,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Files in model_saves and wandb
 model_saves/*.pth
+wandb/
