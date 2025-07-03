@@ -22,106 +22,66 @@ import os
 from sklearn.metrics import precision_score, recall_score
 #import matplotlib.pyplot as plt
 
-def main(args):
-    """
-    Initial setup
-    """
+def run_eval(model, args, val_loader, total_iter, epoch_index=0):
+    print("______\n")
+    print(f"Evaluating for epoch {epoch_index}")
 
-    print('CUDA Device count: ', torch.cuda.device_count())
+    model.val()                                 
+    total_val_loss, total_val_acc = 0.0, 0.0
 
-    # Parse command line arguments
-    # para = HyperParameters()
-    # para.parse()
+    with torch.no_grad():
+        for batch_idx, data_val in enumerate(val_loader):
+            with autocast():
+                log_viz = batch_idx < 3
+                loss, acc = model.val_pass(
+                    data_val,
+                    epoch_index,                  
+                    log_viz,
+                    total_iter
+                )
+            torch.cuda.empty_cache()
+            total_val_loss += loss
+            total_val_acc  += acc
 
-    # if para['benchmark']:
-    #     torch.backends.cudnn.benchmark = True
+    val_loss = total_val_loss / len(val_loader)
+    val_acc  = total_val_acc  / len(val_loader)
 
-    """
-    Model related
-    """
-    model = STCNModel(args).train()
-    # For loading a checkpoint to continue training
-    #it = model.load_model("model_saves/_checkpoint_epoch3_run1_12.pth")
-
-    total_iter = 0
-
-    """
-    Load dataset
-    """
-    episode_list = sorted(os.listdir(args.raw_data), reverse=False)
-
-    #val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41", "wom1-21"]
-    #train_episodes = list(set(episode_list) - set(val_episodes))
-    # Minisets
-    val_episodes = ["cbdr8-54"]
-    train_episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
-    train_batch_size = args.batch_size
-
-    data = []
-    for ep in train_episodes:
-            dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
-            data.append(dataset)
-    train_dataset = torch.utils.data.ConcatDataset(data)
-    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
-
-    val_data = []
-    for ep in val_episodes:
-        val_dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
-        val_data.append(val_dataset)
-    val_dataset = torch.utils.data.ConcatDataset(val_data)
-    val_loader = DataLoader(val_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
+    wandb.log({
+        "val_loss": val_loss,
+        "val_object_level_accuracy": val_acc
+    })
+    print(f"[Eval] loss={val_loss:.4f}  acc={val_acc:.2%}")
     
-    """
-    Determine current/max epoch
-    """
-    # print('Training loader size:', len(train_loader))
-    total_epoch = args.num_epochs
-    current_epoch = 0
-    #current_epoch = 4
-    #current_epoch = 12
-    print('Number of training epochs (the last epoch might not complete): ', total_epoch)
-
-    """
-    wandb setup
-    """
-    #wandb.init(entity='harplab-SA', project='dreyevr_stcn', name="full_training_with_ignore_mask_redo", config=vars(args))
-    #wandb.watch(model, log='all')
-
+def train_model(model, args, current_epoch, train_loader, val_loader, total_iter):
     """
     Starts training
     """
     # Need this to select random bases in different workers
     # np.random.seed(np.random.randint(2**30-1) + local_rank*100)
     # model.save_checkpoint(total_iter)
+    total_epoch = args.num_epochs
+
     best_val_acc = 0
-    print("Before epoch")
+    print("______\n")
+    print("Start training")
     for e in range(current_epoch, total_epoch): 
         print('Epoch %d/%d' % (e, total_epoch))
-        print("After epoch")
         total_train_loss = 0
         total_train_acc = 0
-        print("Print before training")
         # Train loop
         model.train()
         batch_idx_train = 0
-        print("Print after training")
         for data in tqdm(train_loader, desc=f"Epoch {e}", leave=False):
-            # print("Break 1")
-            # print(data)
             with autocast():
                 log_viz = batch_idx_train < 3
                 curr_loss, curr_acc = model.do_pass(data, e, log_viz, total_iter)
-                #breakpoint()
-            # print("Break 2")
-            batch_idx_train += 1
             torch.cuda.empty_cache()
-            # print("Break 3")
             total_train_loss += curr_loss
             total_train_acc += curr_acc
             total_iter += 1
         train_loss = total_train_loss / len(train_loader)
         train_acc = total_train_acc / len(train_loader)
-        #wandb.log({'train_loss': train_loss, 'train_object_level_accuracy': train_acc})
+        wandb.log({'train_loss': train_loss, 'train_object_level_accuracy': train_acc})
         
         # validation every 2 epochs
         if e % 2 == 0:
@@ -140,7 +100,7 @@ def main(args):
             
             val_loss = total_val_loss / len(val_loader)
             val_acc = total_val_acc / len(val_loader)
-            #wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
+            wandb.log({'val_loss': val_loss, 'val_object_level_accuracy': val_acc})
 
             # saving the best epoch
             if val_acc > best_val_acc:
@@ -167,57 +127,212 @@ def main(args):
 
         val_sample = next(iter(val_loader))
         model.viz_pass(val_sample, "val", 0)
-    
+        
+def run_eval_and_test(model, args):
+    """
+    Split into validation and test epoch
+    """
     # Test Epoch
-    # test_dir = "/home/harpadmin/raw_data_test"
-    # test_episodes = sorted(os.listdir(test_dir), reverse=False)
-    # #test_episodes = ["cbdr4-35", "cbdr7-41"]
-    # test_data = []
-    # for ep in test_episodes:
-    #     test_dataset = SituationalAwarenessDataset(test_dir, args.sensor_config_file, ep, args)
-    #     test_data.append(test_dataset)
-    # test_dataset = torch.utils.data.ConcatDataset(test_data)
-    # test_loader = DataLoader(test_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
+    test_dir = args.test_data
+    it = model.load_model("model_saves/_checkpoint.pth")
+    
+    test_episodes = sorted(os.listdir(test_dir), reverse=False)
+    #test_episodes = ["cbdr4-35", "cbdr7-41"]
+    test_data = []
+    for ep in test_episodes:
+        test_dataset = SituationalAwarenessDataset(test_dir, args.sensor_config_file, ep, args)
+        test_data.append(test_dataset)
+    test_dataset = torch.utils.data.ConcatDataset(test_data)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
-    # #Get test metrics
+    model.val()
+    print("______\n")
+    print("Testing")
+    total_test_loss = 0
+    total_test_acc = 0
+    # total_test_prec = 0
+    # total_test_rec = 0
+    preds_list = []
+    gts_list = []
+    raw_preds_list = []
+    with torch.no_grad():
+        for data_test in tqdm(test_loader, desc="Testing Eval", leave=False):
+            with autocast():
+                curr_loss, curr_acc, curr_preds, curr_gts, curr_raw_preds = model.test_pass(data_test, it)
+            preds_list += curr_preds
+            gts_list += curr_gts
+            raw_preds_list += curr_raw_preds
+            torch.cuda.empty_cache()
+            total_test_loss += curr_loss
+            total_test_acc += curr_acc
+            # total_test_prec += curr_precision
+            # total_test_rec += curr_recall
+            #model.viz_pass(data_test, "test", it)
+
+    # Save preds_list and gts_list
+    np.save('model_saves/test_preds.npy', preds_list)
+    np.save('model_saves/test_gts.npy', gts_list)
+    np.save('model_saves/test_raw_preds.npy', raw_preds_list)
+
+
+    test_loss = total_test_loss / len(test_loader)
+    print(test_loss)
+    test_acc = total_test_acc / len(test_loader)
+    print(test_acc)
+    test_prec = precision_score(gts_list, preds_list)
+    print(test_prec)
+    test_rec = recall_score(gts_list, preds_list)
+    print(test_rec)
+    wandb.log({'test_avg_loss': test_loss, 'test_avg_object_level_accuracy': test_acc, 'test_precision': test_prec, 'test_recall': test_rec})
+
     # model.val()
-    # print("Testing")
+    # test_dir = args.test_data 
+
+    # if not os.path.isdir(test_dir):
+    #     raise FileNotFoundError(f"Test directory {test_dir} not found.")
+
+    # print("Running evaluation on test data...")
+    # test_episodes = sorted(os.listdir(test_dir), reverse=False)
+    
+    # test_data = [
+    #     SituationalAwarenessDataset(test_dir, args.sensor_config_file, ep, args)
+    #     for ep in test_episodes
+    # ]
+    # test_dataset = torch.utils.data.ConcatDataset(test_data)
+    # test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+
+    # preds_list, gts_list, raw_preds_list = [], [], []
     # total_test_loss = 0
     # total_test_acc = 0
-    # # total_test_prec = 0
-    # # total_test_rec = 0
-    # preds_list = []
-    # gts_list = []
-    # raw_preds_list = []
+
     # with torch.no_grad():
     #     for data_test in tqdm(test_loader, desc="Testing Eval", leave=False):
     #         with autocast():
-    #             curr_loss, curr_acc, curr_preds, curr_gts, curr_raw_preds = model.val_pass(data_test, total_epoch, it)
+    #             curr_loss, curr_acc, curr_preds, curr_gts, curr_raw_preds = model.val_pass(data_test, 0, 0)
     #         preds_list += curr_preds
     #         gts_list += curr_gts
     #         raw_preds_list += curr_raw_preds
-    #         torch.cuda.empty_cache()
     #         total_test_loss += curr_loss
     #         total_test_acc += curr_acc
-    #         # total_test_prec += curr_precision
-    #         # total_test_rec += curr_recall
-    #         #model.viz_pass(data_test, "test", it)
+    #         torch.cuda.empty_cache()
 
-    # # Save preds_list and gts_list
+    # # Optional save
     # np.save('model_saves/test_preds.npy', preds_list)
     # np.save('model_saves/test_gts.npy', gts_list)
     # np.save('model_saves/test_raw_preds.npy', raw_preds_list)
 
-
+    # # Metrics
     # test_loss = total_test_loss / len(test_loader)
-    # print(test_loss)
     # test_acc = total_test_acc / len(test_loader)
-    # print(test_acc)
-    # test_prec = precision_score(gts_list, preds_list)
-    # print(test_prec)
-    # test_rec = recall_score(gts_list, preds_list)
-    # print(test_rec)
-    # wandb.log({'test_avg_loss': test_loss, 'test_avg_object_level_accuracy': test_acc, 'test_precision': test_prec, 'test_recall': test_rec})
+    # test_prec = precision_score(gts_list, preds_list, zero_division=0)
+    # test_rec = recall_score(gts_list, preds_list, zero_division=0)
+
+    # print(f"[Test Loss]: {test_loss:.4f}")
+    # print(f"[Test Accuracy]: {test_acc:.4f}")
+    # print(f"[Test Precision]: {test_prec:.4f}")
+    # print(f"[Test Recall]: {test_rec:.4f}")
+
+
+def main(args):
+    """
+    Initial setup
+    """
+
+    print('CUDA Device count: ', torch.cuda.device_count())
+
+    # Parse command line arguments
+    # para = HyperParameters()
+    # para.parse()
+
+    # if para['benchmark']:
+    #     torch.backends.cudnn.benchmark = True
+
+    """
+    Model related
+    """
+    model = STCNModel(args).train()
+    # For loading a checkpoint to continue training
+    #it = model.load_model("model_saves/_checkpoint_epoch3_run1_12.pth")
+
+    total_iter = 0
+                
+    """
+    Load dataset
+    """
+    episode_list = sorted(os.listdir(args.raw_data), reverse=False)
+
+    if args.full_dataset:
+        # Full dataset 
+        val_episodes = ["cbdr8-54" , "cbdr9-23", "cbdr6-41"]
+        # train_episodes = list(set(episode_list) - set(val_episodes))
+        train_episodes = [ep for ep in episode_list if ep not in val_episodes]
+    elif args.mini_dataset:
+        # Minisets
+        val_episodes = ["cbdr8-54"]
+        train_episodes = ["cbdr9-23", "cbdr6-41", "abd-21"]
+    train_batch_size = args.batch_size
+
+    data = []
+    for ep in train_episodes:
+            dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
+            data.append(dataset)
+    train_dataset = torch.utils.data.ConcatDataset(data)
+    train_loader = DataLoader(train_dataset, batch_size=train_batch_size, shuffle=True, num_workers=args.num_workers)
+
+    # In the validation dataset creation section, add debugging:
+    val_data = []
+    for ep in val_episodes:
+        # print(f"Loading validation episode: {ep}")
+        try:
+            val_dataset = SituationalAwarenessDataset(args.raw_data, args.sensor_config_file, ep, args)
+            val_data.append(val_dataset)
+            val_loader = DataLoader(val_dataset, batch_size=train_batch_size, shuffle=False, num_workers=args.num_workers)
+        except Exception as e:
+            print(f"Error loading episode {ep}: {e}")
+            raise e
+        
+    """
+    Determine current/max epoch
+    """
+    # print('Training loader size:', len(train_loader))
+    total_epoch = args.num_epochs
+    current_epoch = 0
+    #current_epoch = 4
+    #current_epoch = 12
+    print('Number of training epochs (the last epoch might not complete): ', total_epoch)
+
+    """
+    wandb setup
+    """
+    #wandb.init(entity='harplab-SA', project='dreyevr_stcn', name="full_training_with_ignore_mask_redo", config=vars(args))
+    #wandb.watch(model, log='all')
+
+    """
+    Load path and eval if want to skip training
+    """
+    if args.load_path:
+        it = model.load_model(args.load_path)        # <-- not load_state_dict
+        print(f"Loaded {args.load_path} (iteration={it})")
+
+    print(type(val_loader))
+    print(val_loader)
+    print(hasattr(val_loader, '__iter__'))
+    
+    if args.eval_only:
+        for e in range(total_epoch):
+            run_eval(model, args, val_loader, total_iter, e)   
+            wandb.finish()                                
+            return
+
+    """
+    Train model 
+    """
+    train_model(model, args, current_epoch, train_loader, val_loader, total_iter)
+    
+    """
+    Run test and evaluation 
+    """
+    run_eval_and_test(model, args)
 
 
         
@@ -256,7 +371,9 @@ if __name__ == "__main__":
     args.add_argument("--bg-classwt", type=float, default=1e-5)
     args.add_argument("--aware-threshold", type=float, default=0.5)
     args.add_argument("--unaware-threshold", type=float, default=0.5)
-
+    group = args.add_mutually_exclusive_group()
+    group.add_argument("--full-dataset", action="store_true", help="Use full dataset split")
+    group.add_argument("--mini-dataset", action="store_true", help="Use mini dataset split")
 
     # training params
     args.add_argument("--device", type=str, default='cuda')
@@ -264,7 +381,7 @@ if __name__ == "__main__":
     args.add_argument("--num-workers", type=int, default=12)
     args.add_argument("--batch_size", type=int, default=16)
     args.add_argument("--num-val-episodes", type=int, default=5)
-    args.add_argument("--num-epochs", type=int, default=20)
+    args.add_argument("--num-epochs", type=int, default=3)
     args.add_argument("--lr", type=float, default=0.0001)
     args.add_argument("--wandb", action='store_false')
     args.add_argument("--dont-log-images", action='store_true')
@@ -289,11 +406,18 @@ if __name__ == "__main__":
     args.add_argument('--id', help='Experiment UNIQUE id, use NULL to disable logging to tensorboard', default='NULL')
     args.add_argument('--debug', help='Debug mode which logs information more often', action='store_true')
 
+    # Evaluating and Testing
+    args.add_argument('--load-path', type=str, default=None,
+                        help='Path to .pth checkpoint to load')
+    args.add_argument('--eval-only', action='store_true',
+                        help='Skip training and just run validation')
+    args.add_argument("--test-data", type=str, default="/media/storage/raw_data_corrected")
+
     # Multiprocessing parameters, not set by users
     args.add_argument('--local_rank', default=0, type=int, help='Local rank of this process')
     
     args.add_argument("--run-name", type=str, default="")
-        
+
     args = args.parse_args()
 
     main(args)    

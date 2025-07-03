@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image
 from model.accuracy import object_level_Accuracy, object_level_Precision, object_level_Recall
 from model.visualization import get_viz
+from datetime import datetime
 
 import wandb
 
@@ -296,12 +297,15 @@ class STCNModel:
         print('Checkpoint saved to %s.' % checkpoint_path)
 
     def save_best_checkpoint(self, it):
+        now = datetime.now()
+        stamp = now.strftime("%Y-%m-%d %H:%M:%S")
+        
         if self.save_path is None:
             print('Saving has been disabled.')
             return
 
         os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
-        checkpoint_path = self.save_path + '_best_checkpoint.pth'
+        checkpoint_path = self.save_path + f"_best_checkpoint_small_{stamp}.pth"
         checkpoint = { 
             'it': it,
             'network': self.STCN.state_dict(),
